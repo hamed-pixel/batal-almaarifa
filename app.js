@@ -46,6 +46,15 @@ const CATS = [
   { id: 'english', name: 'اللغة الإنجليزية', c: '#B91C1C', t: 40, curr: true }
 ];
 const forGrade = (c, g) => !c.grades || (g >= c.grades[0] && g <= c.grades[1]);
+const qid = q => q.gen ? 'g:' + q.q : q.id;
+// وحدات المادة في الفصل مرتبة برقم الوحدة، مع عدد الأسئلة الكلي والمتبقي للطالب
+async function unitsInfo(cat, sem) {
+  const g = S.p.grade, done = new Set(S.p.done || []);
+  const inSem = (await API.questions()).filter(q => q.cat === cat && q.active !== false && q.gmin <= g && g <= q.gmax && (!q.sem || q.sem === sem) && q.unit);
+  const num = u => +(u.match(/الوحدة (\d+)/) || [])[1] || 0;
+  return [...new Set(inSem.map(q => q.unit))].sort((a, b) => num(a) - num(b) || a.localeCompare(b, 'ar'))
+    .map(u => { const qs = inSem.filter(q => q.unit === u); return { u, n: num(u), total: qs.length, left: qs.filter(q => !done.has(q.id)).length }; });
+}
 const catOf = id => CATS.find(c => c.id === id) || { name: id, c: '#666' };
 const icon = (id, size = 36) => `<svg viewBox="0 0 32 32" width="${size}" height="${size}" aria-hidden="true">${ICON[id] || ''}</svg>`;
 
@@ -204,30 +213,33 @@ const Student = {
 
   async buildRound(cat, sem, unit) {
     const g = S.p.grade, lvl = catLevel(S.p.cats?.[cat]?.pts || 0), N = 8;
-    let seen = []; try { seen = JSON.parse(localStorage.getItem('bm_seen_' + S.uid)) || []; } catch {}
-    const bank = (await API.questions()).filter(q => q.cat === cat && q.active !== false && q.gmin <= g && g <= q.gmax && (!sem || !q.sem || q.sem === sem) && (!unit || unit === '*' || q.unit === unit));
-    // المستوى الحالي أولًا، ثم الأسهل، مع تقديم ما لم يُرَ من قبل
-    const score = q => (seen.includes(q.id) ? 10 : 0) + ((q.lvl || 1) > lvl ? 20 : 0) + Math.abs(lvl - (q.lvl || 1)) + Math.random();
+    // كل سؤال يُجاب مرة واحدة فقط؛ الأسئلة المُجابة محفوظة في حساب الطالب (done) فلا تعود ولا تتكرر نقاطها
+    const done = new Set(S.p.done || []);
+    const all = (await API.questions()).filter(q => q.cat === cat && q.active !== false && q.gmin <= g && g <= q.gmax && (!sem || !q.sem || q.sem === sem) && (!unit || unit === '*' || q.unit === unit));
+    const bank = all.filter(q => !done.has(q.id));
+    // المستوى الحالي أولًا، ثم الأسهل
+    const score = q => ((q.lvl || 1) > lvl ? 20 : 0) + Math.abs(lvl - (q.lvl || 1)) + Math.random();
     let pool = bank.sort((a, b) => score(a) - score(b));
     const genN = cat === 'math' ? N - Math.min(2, pool.length) : cat === 'iq' ? N - Math.min(4, pool.length) : 0;
     let qs = pool.slice(0, N - genN);
-    for (let i = 0; i < genN; i++) qs.push(cat === 'math' ? mathQ(g, lvl) : iqQ(g, lvl));
+    for (let i = 0; i < genN; i++) {  // أسئلة مولّدة لا تتكرر مع ما أُجيب سابقًا أو في الجولة نفسها
+      let q, t = 0; do { q = cat === 'math' ? mathQ(g, lvl) : iqQ(g, lvl); } while ((done.has(qid(q)) || qs.some(x => x.q === q.q)) && ++t < 30);
+      qs.push(q);
+    }
     if (cat === 'reading') qs.sort((a, b) => (a.passage || '').localeCompare(b.passage || '')); // أسئلة النص الواحد متتالية
     else qs = shuffle(qs);
-    return { qs, seen };
+    return { qs, total: all.length };
   },
 
   async play(cat, sem, unit) {
     const c = catOf(cat);
     if (c.curr && sem && !unit) {  // اختيار الوحدة من كتاب الطالب
-      const g = S.p.grade, inSem = (await API.questions()).filter(q => q.cat === cat && q.active !== false && q.gmin <= g && g <= q.gmax && (!q.sem || q.sem === sem) && q.unit);
-      const cnt = u => inSem.filter(q => q.unit === u).length, units = [...new Set(inSem.map(q => q.unit))]
-        .sort((a, b) => (+(a.match(/الوحدة (\d+)/) || [])[1] || 0) - (+(b.match(/الوحدة (\d+)/) || [])[1] || 0) || a.localeCompare(b, 'ar'));
+      const info = await unitsInfo(cat, sem), units = info.map(x => x.u);
       if (units.length) {
         app.innerHTML = `<section class="card" style="display:grid;gap:12px;--c:${c.c}">
           <div class="row" style="color:${c.c}">${icon(cat, 28)}<h2 style="font-size:1.25rem">${c.name} · الفصل ${sem === 1 ? 'الأول' : 'الثاني'}</h2></div>
           <p class="muted" style="margin:0">اختر الوحدة من كتابك، أو العب أسئلة كل الوحدات.</p>
-          <div id="units" style="display:grid;gap:8px">${units.map((u, i) => `<button class="opt row" data-u="${i}" style="justify-content:space-between"><span>${esc(u)}</span><span class="chip">${cnt(u)} ${cnt(u) > 10 ? 'سؤالًا' : cnt(u) > 2 ? 'أسئلة' : cnt(u) === 2 ? 'سؤالان' : 'سؤال'}</span></button>`).join('')}
+          <div id="units" style="display:grid;gap:8px">${info.map((x, i) => `<button class="opt row" data-u="${i}" style="justify-content:space-between;${x.left ? '' : 'opacity:.6'}"><span>${x.left ? '' : '✅ '}${esc(x.u)}</span><span class="chip">${x.left ? `باقي ${x.left} من ${x.total}` : 'مكتملة'}</span></button>`).join('')}
             <button class="btn" data-u="*">كل الوحدات</button></div>
           <button class="ghost" onclick="Student.play('${cat}')">رجوع</button></section>`;
         $('#units').onclick = e => { const b = e.target.closest('[data-u]'); if (b) Student.play(cat, sem, b.dataset.u === '*' ? '*' : units[+b.dataset.u]); };
@@ -244,13 +256,23 @@ const Student = {
       return;
     }
     app.innerHTML = `<section class="card"><p class="muted">جارٍ تجهيز الأسئلة…</p></section>`;
-    const { qs, seen } = await this.buildRound(cat, sem, unit);
+    const { qs, total } = await this.buildRound(cat, sem, unit);
+    if (!qs.length && total) {  // انتهت الأسئلة: ننتقل للوحدة التالية
+      const info = c.curr && sem ? await unitsInfo(cat, sem) : [], nextU = unit && unit !== '*' ? info.find(x => x.left && x.n > (info.find(y => y.u === unit)?.n ?? -1)) || info.find(x => x.left) : null;
+      app.innerHTML = `<section class="card result" style="display:grid;gap:12px;--c:${c.c}">
+        <div class="big">🏅</div>
+        <h2>${unit && unit !== '*' ? `أكملت «${esc(unit)}»!` : `أنهيت كل أسئلة ${c.name}${sem ? ` للفصل ${sem === 1 ? 'الأول' : 'الثاني'}` : ''} المتاحة لصفّك!`}</h2>
+        <p class="muted" style="margin:0">${nextU ? `الوحدة التالية: <b>${esc(nextU.u)}</b> (${nextU.left} ${nextU.left > 2 ? 'أسئلة' : 'سؤال'})` : 'ستُضاف أسئلة جديدة قريبًا، جرّب مادة أخرى.'}</p>
+        <div class="row" style="justify-content:center">${nextU ? '<button class="btn green" id="nu">ابدأ الوحدة التالية</button>' : ''}<button class="ghost" onclick="Student.home()">الرئيسية</button></div></section>`;
+      if (nextU) $('#nu').onclick = () => Student.play(cat, sem, nextU.u);
+      return;
+    }
     if (!qs.length) { app.innerHTML = `<section class="card"><p>⏳ أسئلة ${c.name} لصفّك ${sem ? `في الفصل ${sem === 1 ? 'الأول' : 'الثاني'} ` : ''}قيد الإعداد من كتابك المدرسي، وتنضاف قريبًا إن شاء الله.</p><button class="btn" onclick="Student.home()">رجوع</button></section>`; return; }
     const R = { cat, sem, unit, i: 0, score: 0, correct: 0, streak: 0, best: 0, hint: false, cut: false };
     let timer = null;
     const next = () => {
       clearInterval(timer);
-      if (R.i >= qs.length) return this.finish(R, qs, seen);
+      if (R.i >= qs.length) return this.finish(R, qs);
       const q = qs[R.i], opts = shuffle(q.opts.map((t, k) => ({ t, ok: k === (q.a || 0) })));
       const T = c.t; let left = T;
       app.innerHTML = `<section class="card" style="display:grid;gap:14px;--c:${c.c}">
@@ -297,7 +319,6 @@ const Student = {
           fb.textContent = k < 0 ? 'انتهى الوقت. الإجابة الصحيحة مظلّلة بالأخضر.' : 'ليست هذه. تعلّم الإجابة الصحيحة المظلّلة بالأخضر.';
         }
         if (q.exp) { const ex = $('#ex'); ex.textContent = '📘 الشرح: ' + q.exp; ex.hidden = false; }
-        if (!q.gen) seen.push(q.id);
         R.i++; const nx = $('#nx'); nx.hidden = false; nx.focus(); nx.onclick = next;
       };
       app.querySelector('.opts').onclick = e => { const b = e.target.closest('[data-k]'); if (b && !b.disabled) answer(+b.dataset.k); };
@@ -305,8 +326,7 @@ const Student = {
     next();
   },
 
-  async finish(R, qs, seen) {
-    try { localStorage.setItem('bm_seen_' + S.uid, JSON.stringify([...new Set(seen)].slice(-400))); } catch {}
+  async finish(R, qs) {
     const p = S.p, total = qs.length;
     const oldRank = rankOf(p.points).name;
     const cs = p.cats?.[R.cat] || { pts: 0, correct: 0, answered: 0 };
@@ -314,7 +334,8 @@ const Student = {
     const np = {
       ...p, points: p.points + R.score, games: p.games + 1, correct: p.correct + R.correct, answered: p.answered + total,
       perfects: (p.perfects || 0) + (R.correct === total ? 1 : 0), hints: (p.hints || 0) + (R.hint ? 1 : 0), cuts: (p.cuts || 0) + (R.cut ? 1 : 0), bestStreak: Math.max(p.bestStreak || 0, R.best), days,
-      cats: { ...p.cats, [R.cat]: { pts: cs.pts + R.score, correct: cs.correct + R.correct, answered: cs.answered + total } }
+      cats: { ...p.cats, [R.cat]: { pts: cs.pts + R.score, correct: cs.correct + R.correct, answered: cs.answered + total } },
+      done: [...new Set([...(p.done || []), ...qs.map(qid)])]
     };
     const fresh = BADGES.filter(([id, , , ok]) => ok(np) && !(p.badges || []).includes(id));
     np.badges = [...(p.badges || []), ...fresh.map(b => b[0])];
