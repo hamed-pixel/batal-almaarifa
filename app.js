@@ -96,15 +96,16 @@ const SFX = (() => {
   };
 })();
 
-const S = { uid: null, p: null };
+const S = { uid: null, p: null, preview: false };
 
 function setNav() {
-  nav.innerHTML = S.p ? `<button class="ghost" data-go="home">الرئيسية</button><button class="ghost" data-go="profile">ملفي</button><button class="ghost" data-go="logout">خروج</button>` : '';
+  nav.innerHTML = S.p ? `<button class="ghost" data-go="home">الرئيسية</button><button class="ghost" data-go="profile">ملفي</button>${S.preview ? '<button class="ghost" data-go="exitpv">إنهاء المعاينة</button>' : '<button class="ghost" data-go="logout">خروج</button>'}` : '';
   if (S.p) nav.insertAdjacentHTML('afterbegin', `<button class="ghost" data-go="sound" aria-label="الصوت">${SFX.on ? '🔊' : '🔇'}</button>`);
 }
 nav.onclick = async e => {
   const g = e.target.closest('[data-go]')?.dataset.go; if (!g) return;
   if (g === 'sound') { SFX.toggle(); return setNav(); }
+  if (g === 'exitpv') { S.preview = false; S.p = null; location.hash = 'admin'; return; }
   if (g === 'logout') { await API.logout(); S.uid = S.p = null; return Student.auth(); }
   Student[g]();
 };
@@ -112,12 +113,12 @@ $('.logo').onclick = () => { if (location.hash === '#admin') return; S.p ? Stude
 $('.logo').style.cursor = 'pointer';
 
 // إعلان في أعلى الصفحة الرئيسية؛ يُخفى عند الإغلاق في هذا الجهاز
-const NEWS_ID = 'curr2';
+const NEWS_ID = 'curr3';
 function newsHTML() {
   try { if (localStorage.getItem('bm_news') === NEWS_ID) return ''; } catch {}
   return `<section class="card news" style="display:grid;gap:8px;border-color:var(--gold);background:color-mix(in srgb, var(--gold) 10%, var(--card))">
     <div class="row" style="justify-content:space-between"><b>🎉 أخيرًا! صارت المناهج الدراسية في الموقع</b><button class="ghost" onclick="try{localStorage.setItem('bm_news','${NEWS_ID}')}catch{};this.closest('.news').remove()" aria-label="إغلاق">✕</button></div>
-    <p style="margin:0">صارت كل موادك هنا: <b>العلوم، الرياضيات، اللغة العربية، التربية الإسلامية، الدراسات الاجتماعية، اللغة الإنجليزية</b>. الأسئلة من دروس كتابك المدرسي، و<b>الفصل الأول والفصل الثاني منفصلان</b>. العلوم جاهزة الآن، والمواد اللي عليها «قريبًا» تنضاف أسئلتها تباعًا.</p>
+    <p style="margin:0">صارت كل موادك هنا: <b>العلوم، الرياضيات، اللغة العربية، التربية الإسلامية، الدراسات الاجتماعية، اللغة الإنجليزية</b>. الأسئلة من دروس كتابك المدرسي، و<b>الفصل الأول والفصل الثاني منفصلان</b>. العلوم والرياضيات جاهزة الآن، والمواد اللي عليها «قريبًا» تنضاف أسئلتها تباعًا.</p>
   </section>`;
 }
 
@@ -188,7 +189,7 @@ const Student = {
     const p = S.p;
     let bank = []; try { bank = await API.questions(); } catch {}
     const ready = id => id === 'math' || id === 'iq' || bank.some(q => q.cat === id && q.active !== false && q.gmin <= p.grade && p.grade <= q.gmax);
-    app.innerHTML = `${newsHTML()}${this.heroHTML()}
+    app.innerHTML = `${S.preview ? pvBar() : ''}${newsHTML()}${this.heroHTML()}
       <section style="display:grid;gap:12px"><h2 style="font-size:1.25rem">اختر ميدانك</h2>
         <div class="cats">${CATS.filter(c => forGrade(c, p.grade)).map(c => {
           const pts = p.cats?.[c.id]?.pts || 0, l = catLevel(pts), pct = l === MAX_LVL ? 100 : Math.round((pts - LVL_EDGES[l - 1]) / (LVL_EDGES[l] - LVL_EDGES[l - 1]) * 100);
@@ -197,6 +198,7 @@ const Student = {
         }).join('')}</div></section>
       <section class="card lb" id="lb"><h2 style="font-size:1.15rem">لوحة الأبطال</h2><p class="muted small">جارٍ التحميل…</p></section>`;
     app.querySelector('.cats').onclick = e => { const b = e.target.closest('[data-c]'); if (b) Student.play(b.dataset.c); };
+    if (S.preview) $('#pvg').onchange = e => { S.p = pvProfile(+e.target.value); Student.home(); };
     this.leaderboard('grade');
   },
 
@@ -341,7 +343,7 @@ const Student = {
     const fresh = BADGES.filter(([id, , , ok]) => ok(np) && !(p.badges || []).includes(id));
     np.badges = [...(p.badges || []), ...fresh.map(b => b[0])];
     const { name, grade, avatar, createdAt, lastLogin, logins, ...patch } = np;
-    try { await API.update(S.uid, patch); await API.log(S.uid, { type: 'game', cat: R.cat, score: R.score, correct: R.correct, total, hint: R.hint, cut: R.cut }); }
+    if (!S.preview) try { await API.update(S.uid, patch); await API.log(S.uid, { type: 'game', cat: R.cat, score: R.score, correct: R.correct, total, hint: R.hint, cut: R.cut }); }
     catch { /* يبقى العرض حتى لو فشل الحفظ */ }
     S.p = np;
     const stars = R.correct === total ? 3 : R.correct >= total * .7 ? 2 : R.correct >= total * .4 ? 1 : 0;
@@ -369,7 +371,7 @@ const Student = {
 
   async profile() {
     setNav(); scrollTo(0, 0);
-    const p = S.p = await API.profile(S.uid);
+    const p = S.preview ? S.p : (S.p = await API.profile(S.uid));
     const acc = p.answered ? Math.round(p.correct / p.answered * 100) : 0;
     app.innerHTML = `${this.heroHTML()}
       <section class="card" style="display:grid;gap:12px"><h2 style="font-size:1.15rem">إحصاءاتي</h2>
@@ -393,8 +395,8 @@ const Student = {
       </section>`;
     let av = p.avatar;
     $('#pa').onclick = e => { const b = e.target.closest('[data-a]'); if (!b) return; av = b.dataset.a; [...$('#pa').children].forEach(x => x.classList.toggle('on', x === b)); };
-    $('#ps').onclick = async () => { await API.update(S.uid, { avatar: av, grade: +$('#pg').value }); S.p = await API.profile(S.uid); $('#pm').textContent = 'تم الحفظ.'; };
-    const games = (await API.activity(S.uid, 40)).filter(a => a.type === 'game').slice(0, 10);
+    $('#ps').onclick = async () => { if (S.preview) { S.p = pvProfile(+$('#pg').value); S.p.avatar = av; $('#pm').textContent = 'تم (في المعاينة فقط).'; return; } await API.update(S.uid, { avatar: av, grade: +$('#pg').value }); S.p = await API.profile(S.uid); $('#pm').textContent = 'تم الحفظ.'; };
+    const games = S.preview ? [] : (await API.activity(S.uid, 40)).filter(a => a.type === 'game').slice(0, 10);
     $('#hist').innerHTML = games.length ? games.map(a => `<div class="row" style="padding:6px 0;border-bottom:1px solid var(--line)"><span class="grow" style="color:var(--ink)">${catOf(a.cat).name}</span><span>${a.correct}/${a.total}</span><b style="color:var(--gold)">+${a.score}</b><span>${fmtTime(a.at)}</span></div>`).join('') : 'لم تلعب أي جولة بعد.';
   }
 };
@@ -415,8 +417,26 @@ function hintFor(q) {
   return `الإجابة الصحيحة ليست «${wrong[0]}»`;
 }
 
+// معاينة صفحة الطالب للمسؤول: ملف وهمي لا يُحفظ منه شيء في قاعدة البيانات
+function pvProfile(grade) {
+  try { localStorage.setItem('bm_pvg', grade); } catch {}
+  return { name: 'معاينة المسؤول', grade, avatar: '👀', points: 0, games: 0, correct: 0, answered: 0, perfects: 0, bestStreak: 0, hints: 0, cuts: 0, cats: {}, badges: [], days: [], done: [] };
+}
+function pvBar() {
+  return `<section class="card row" style="justify-content:space-between;border-color:var(--gold);background:color-mix(in srgb, var(--gold) 12%, var(--card))">
+    <b>👀 وضع المعاينة: هذا ما يراه الطالب (لا يُحفظ أي شيء)</b>
+    <label class="row small">الصف<select id="pvg">${GRADE_NAMES.slice(1).map((n, i) => `<option value="${i + 1}" ${i + 1 === S.p.grade ? 'selected' : ''}>${n}</option>`).join('')}</select></label>
+  </section>`;
+}
+
 async function route() {
-  if (location.hash === '#admin') return Admin.render();
+  if (location.hash === '#admin') { S.preview = false; S.p = null; return Admin.render(); }
+  if (location.hash === '#preview') {
+    if (!(await API.isAdmin())) { location.hash = ''; return; }
+    let g = 5; try { g = +localStorage.getItem('bm_pvg') || 5; } catch {}
+    S.preview = true; S.uid = null; S.p = pvProfile(g); return Student.home();
+  }
+  S.preview = false;
   S.uid = API.me();
   S.p = S.uid ? await API.profile(S.uid) : null;
   if (S.p && !(await API.isAdmin())) Student.home(); else { S.p = null; Student.auth(); }

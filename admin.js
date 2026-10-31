@@ -9,7 +9,7 @@ const Admin = {
     $('#aout').onclick = async () => { await API.logout(); location.hash = ''; };
     app.innerHTML = `<section class="card" style="display:grid;gap:12px">
         <div class="row" style="justify-content:space-between"><h1 style="font-size:1.4rem">لوحة المسؤول</h1>
-          <span class="chip">${API.live ? 'متصل بقاعدة البيانات' : 'وضع تجريبي'}</span></div>
+          <span class="row"><button class="btn" onclick="location.hash='preview'">👀 معاينة صفحة الطالب</button><span class="chip">${API.live ? 'متصل بقاعدة البيانات' : 'وضع تجريبي'}</span></span></div>
         <div class="tabs"><button data-t="students">الطلاب</button><button data-t="questions">الأسئلة</button><button data-t="summary">ملخص</button></div>
       </section><div id="ab"></div>`;
     app.querySelector('.tabs').onclick = e => { const t = e.target.dataset.t; if (t) { this.tab = t; this.show(); } };
