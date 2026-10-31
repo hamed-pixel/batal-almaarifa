@@ -9,6 +9,10 @@ const AVATARS = ['🐪', '🦅', '🐢', '🐎', '🐬', '🦌', '🌴', '⛵', 
 const GRADE_NAMES = ['', 'الأول', 'الثاني', 'الثالث', 'الرابع', 'الخامس', 'السادس', 'السابع', 'الثامن', 'التاسع', 'العاشر', 'الحادي عشر', 'الثاني عشر'];
 
 const ICON = {
+  physics: '<circle cx="16" cy="16" r="2.6" fill="currentColor"/><ellipse cx="16" cy="16" rx="12" ry="5" fill="none" stroke="currentColor" stroke-width="2"/><ellipse cx="16" cy="16" rx="12" ry="5" transform="rotate(60 16 16)" fill="none" stroke="currentColor" stroke-width="2"/><ellipse cx="16" cy="16" rx="12" ry="5" transform="rotate(-60 16 16)" fill="none" stroke="currentColor" stroke-width="2"/>',
+  chemistry: '<path d="M12 4h8M13 4v9L6 26a2 2 0 0 0 2 3h16a2 2 0 0 0 2-3l-7-13V4" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linejoin="round"/><circle cx="13" cy="22" r="1.6" fill="currentColor"/><circle cx="19" cy="24" r="1.6" fill="currentColor"/><circle cx="17" cy="19" r="1.2" fill="currentColor"/>',
+  biology: '<path d="M10 4c0 6 12 6 12 12s-12 6-12 12M22 4c0 6-12 6-12 12s12 6 12 12M11 9h10M11 23h10M13 16h6" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/>',
+  envsci: '<circle cx="16" cy="16" r="11" fill="none" stroke="currentColor" stroke-width="2.4"/><path d="M10 20c0-6 5-10 12-10-1 7-5 11-12 10zM10 20l6-5" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linejoin="round"/>',
   arabic: '<text x="16" y="25" text-anchor="middle" font-size="24" font-weight="700" fill="currentColor" font-family="Reem Kufi, sans-serif">ض</text>',
   islamic: '<path d="M20 5a11 11 0 1 0 7 19A9 9 0 1 1 20 5z" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linejoin="round"/><path d="M22 12l1 3h3l-2.5 2 1 3-2.5-2-2.5 2 1-3-2.5-2h3z" fill="currentColor"/>',
   social: '<circle cx="16" cy="16" r="11" fill="none" stroke="currentColor" stroke-width="2.4"/><path d="M5 16h22M16 5c4 4 4 18 0 22M16 5c-4 4-4 18 0 22" fill="none" stroke="currentColor" stroke-width="2"/>',
@@ -28,12 +32,18 @@ const CATS = [
   { id: 'oman', name: 'تاريخ عُمان', c: '#A8161F', t: 30 },
   { id: 'arab', name: 'العرب', c: '#155C3E', t: 30 },
   { id: 'islam', name: 'ديننا الإسلامي', c: '#0E7C86', t: 30 },
-  { id: 'science', name: 'العلوم', c: '#B4530A', t: 40, curr: true }, // من المنهج: الفصل الأول والثاني منفصلان
+  { id: 'science', name: 'العلوم', c: '#B4530A', t: 40, curr: true, grades: [1, 10] }, // من المنهج: الفصل الأول والثاني منفصلان
+  // الصفان 11 و12: العلوم مقسّمة إلى مواد منفصلة كما في كتب الوزارة
+  { id: 'physics', name: 'الفيزياء', c: '#1D4ED8', t: 50, curr: true, grades: [11, 12] },
+  { id: 'chemistry', name: 'الكيمياء', c: '#B4530A', t: 50, curr: true, grades: [11, 12] },
+  { id: 'biology', name: 'الأحياء', c: '#15803D', t: 45, curr: true, grades: [11, 12] },
+  { id: 'envsci', name: 'العلوم البيئية', c: '#0E7490', t: 45, curr: true, grades: [11, 12] },
   { id: 'arabic', name: 'اللغة العربية', c: '#7A3E9D', t: 40, curr: true },
   { id: 'islamic', name: 'التربية الإسلامية', c: '#0F766E', t: 35, curr: true },
   { id: 'social', name: 'الدراسات الاجتماعية', c: '#9A6B00', t: 35, curr: true },
   { id: 'english', name: 'اللغة الإنجليزية', c: '#B91C1C', t: 40, curr: true }
 ];
+const forGrade = (c, g) => !c.grades || (g >= c.grades[0] && g <= c.grades[1]);
 const catOf = id => CATS.find(c => c.id === id) || { name: id, c: '#666' };
 const icon = (id, size = 36) => `<svg viewBox="0 0 32 32" width="${size}" height="${size}" aria-hidden="true">${ICON[id] || ''}</svg>`;
 
@@ -168,7 +178,7 @@ const Student = {
     const ready = id => id === 'math' || id === 'iq' || bank.some(q => q.cat === id && q.active !== false && q.gmin <= p.grade && p.grade <= q.gmax);
     app.innerHTML = `${newsHTML()}${this.heroHTML()}
       <section style="display:grid;gap:12px"><h2 style="font-size:1.25rem">اختر ميدانك</h2>
-        <div class="cats">${CATS.map(c => {
+        <div class="cats">${CATS.filter(c => forGrade(c, p.grade)).map(c => {
           const pts = p.cats?.[c.id]?.pts || 0, l = catLevel(pts), pct = l === MAX_LVL ? 100 : Math.round((pts - LVL_EDGES[l - 1]) / (LVL_EDGES[l] - LVL_EDGES[l - 1]) * 100);
           return `<button class="cat" style="--c:${c.c}" data-c="${c.id}">${icon(c.id)}<b>${c.name}</b>
             <span class="small">${!ready(c.id) ? '<span class="chip">قريبًا</span> ' : c.curr ? '<span class="chip">من منهجك</span> ' : ''}المرحلة ${l} من ${MAX_LVL} · ${pts} نقطة</span><div class="bar"><i style="width:${pct}%"></i></div></button>`;
@@ -330,7 +340,7 @@ const Student = {
           <div class="stat"><span class="small muted">أفضل سلسلة</span><b>${p.bestStreak || 0}</b></div>
           <div class="stat"><span class="small muted">أيام اللعب</span><b>${(p.days || []).length}</b></div>
         </div>
-        ${CATS.map(c => { const s = p.cats?.[c.id] || { pts: 0, correct: 0, answered: 0 };
+        ${CATS.filter(c => forGrade(c, p.grade) || p.cats?.[c.id]).map(c => { const s = p.cats?.[c.id] || { pts: 0, correct: 0, answered: 0 };
           return `<div class="row"><span style="color:${c.c}">${icon(c.id, 22)}</span><span class="grow">${c.name}</span><span class="small muted">${s.answered ? Math.round(s.correct / s.answered * 100) + '% دقة · ' : ''}${s.pts} نقطة</span></div>`; }).join('')}
       </section>
       <section class="card" style="display:grid;gap:12px"><h2 style="font-size:1.15rem">شاراتي <span class="small muted">(${(p.badges || []).length} من ${BADGES.length})</span></h2>
