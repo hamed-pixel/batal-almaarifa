@@ -229,6 +229,7 @@ const Student = {
         </div>
         <div class="passage" id="ht" hidden></div>
         <div class="feedback" id="fb"></div>
+        <div class="passage" id="ex" hidden></div>
         <button class="btn green" id="nx" hidden>${R.i + 1 < qs.length ? 'السؤال التالي' : 'النتيجة'}</button>
       </section>`;
       const bar = $('#tm i'), tm = $('#tm');
@@ -258,6 +259,7 @@ const Student = {
           R.streak = 0; fb.className = 'feedback bad'; SFX.bad();
           fb.textContent = k < 0 ? 'انتهى الوقت. الإجابة الصحيحة مظلّلة بالأخضر.' : 'ليست هذه. تعلّم الإجابة الصحيحة المظلّلة بالأخضر.';
         }
+        if (q.exp) { const ex = $('#ex'); ex.textContent = '📘 الشرح: ' + q.exp; ex.hidden = false; }
         if (!q.gen) seen.push(q.id);
         R.i++; const nx = $('#nx'); nx.hidden = false; nx.focus(); nx.onclick = next;
       };

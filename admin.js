@@ -163,6 +163,7 @@ const Admin = {
         <label class="f">المستوى<select id="fl">${[1, 2, 3, 4, 5].map(l => `<option ${l === (q.lvl || 1) ? 'selected' : ''}>${l}</option>`).join('')}</select></label></div>
       <label class="f">نص للقراءة (اختياري)<textarea id="fp" placeholder="للأسئلة التي تعتمد على قطعة قراءة">${esc(q.passage)}</textarea></label>
       <label class="f">السؤال<input id="fq2" value="${esc(q.q)}" required></label>
+      <label class="f">الشرح (يظهر للطالب بعد الإجابة، اختياري)<textarea id="fx" placeholder="لماذا هذه هي الإجابة الصحيحة؟">${esc(q.exp || '')}</textarea></label>
       <div class="f"><span>الخيارات (اختر الصحيحة)</span>${q.opts.map((o, i) => `<div class="row"><input type="radio" name="fa" value="${i}" ${i === (q.a || 0) ? 'checked' : ''} style="width:auto" aria-label="الإجابة الصحيحة"><input class="grow" id="fo${i}" value="${esc(o)}" placeholder="الخيار ${i + 1}"></div>`).join('')}</div>
       <div class="err" id="fe"></div>
       <div class="row"><button class="btn green" id="fsave">${q.id ? 'حفظ التعديل' : 'إضافة السؤال'}</button>${q.id ? '<button class="ghost" id="fcancel">إلغاء</button>' : ''}</div>`;
@@ -171,7 +172,7 @@ const Admin = {
       const opts = [0, 1, 2, 3].map(i => $('#fo' + i).value.trim()), gmin = +$('#f1').value, gmax = +$('#f2').value;
       if (!$('#fq2').value.trim() || opts.some(o => !o)) return $('#fe').textContent = 'اكتب السؤال والخيارات الأربعة.';
       if (gmin > gmax) return $('#fe').textContent = '«من صف» يجب أن يكون أصغر من أو يساوي «إلى صف».';
-      await API.saveQuestion({ id: q.id, cat: $('#fc').value, gmin, gmax, lvl: +$('#fl').value, sem: +$('#fsem').value || 0, passage: $('#fp').value.trim(), q: $('#fq2').value.trim(), opts, a: +document.querySelector('[name=fa]:checked').value, active: q.active !== false });
+      await API.saveQuestion({ id: q.id, cat: $('#fc').value, gmin, gmax, lvl: +$('#fl').value, sem: +$('#fsem').value || 0, passage: $('#fp').value.trim(), exp: $('#fx').value.trim(), q: $('#fq2').value.trim(), opts, a: +document.querySelector('[name=fa]:checked').value, active: q.active !== false });
       this.questions();
     };
   },
