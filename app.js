@@ -1,0 +1,283 @@
+// واجهة الطالب
+const $ = s => document.querySelector(s);
+const app = $('#app'), nav = $('#nav'), modalEl = $('#modal');
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const shuffle = a => { a = [...a]; for (let i = a.length - 1; i > 0; i--) { const j = Math.random() * (i + 1) | 0; [a[i], a[j]] = [a[j], a[i]]; } return a; };
+const fmtTime = t => t ? new Date(t).toLocaleString('ar-OM', { dateStyle: 'medium', timeStyle: 'short' }) : '—';
+const today = () => new Date().toISOString().slice(0, 10);
+const AVATARS = ['🐪', '🦅', '🐢', '🐎', '🐬', '🦌', '🌴', '⛵', '🏰', '🌙', '📚', '⭐'];
+const GRADE_NAMES = ['', 'الأول', 'الثاني', 'الثالث', 'الرابع', 'الخامس', 'السادس', 'السابع', 'الثامن', 'التاسع', 'العاشر', 'الحادي عشر', 'الثاني عشر'];
+
+const ICON = {
+  reading: '<path d="M4 7c4-2 8-2 12 1 4-3 8-3 12-1v18c-4-2-8-2-12 1-4-3-8-3-12-1z" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linejoin="round"/><path d="M16 8v18" stroke="currentColor" stroke-width="2.4"/>',
+  iq: '<circle cx="16" cy="13" r="8" fill="none" stroke="currentColor" stroke-width="2.4"/><path d="M12 24h8M13 28h6M16 9v4l3 2" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/>',
+  math: '<path d="M6 10h8M10 6v8M19 10h8M6 22l7 7M13 22l-7 7M19 23h8M19 28h8" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"/>',
+  oman: '<path d="M5 29V13h4v-3h3v3h3V7h-1V4h4v3h-1v6h3v-3h3v3h4v16h-8v-6a3 3 0 0 0-6 0v6z" fill="currentColor"/>',
+  arab: '<path d="M16 30V14M16 14c-3-6-9-6-12-3 4-1 8 0 12 3zm0 0c3-6 9-6 12-3-4-1-8 0-12 3zm0 0c-1-6-6-9-10-8 4 1 7 4 10 8zm0 0c1-6 6-9 10-8-4 1-7 4-10 8z" fill="currentColor" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/>',
+  islam: '<path d="M20 5a11 11 0 1 0 7 19A9 9 0 1 1 20 5z" fill="currentColor"/><path d="M23 10l1 2.5 2.6.2-2 1.7.7 2.6-2.3-1.4-2.3 1.4.6-2.6-2-1.7 2.7-.2z" fill="currentColor"/>'
+};
+const CATS = [
+  { id: 'reading', name: 'بطل القراءة', c: '#8A5A12', t: 50 },
+  { id: 'iq', name: 'الذكاء وتمرين المخ', c: '#5B3FA0', t: 40 },
+  { id: 'math', name: 'الرياضيات', c: '#1F5FA8', t: 45 },
+  { id: 'oman', name: 'تاريخ عُمان', c: '#A8161F', t: 30 },
+  { id: 'arab', name: 'العرب', c: '#155C3E', t: 30 },
+  { id: 'islam', name: 'ديننا الإسلامي', c: '#0E7C86', t: 30 }
+];
+const catOf = id => CATS.find(c => c.id === id) || { name: id, c: '#666' };
+const icon = (id, size = 36) => `<svg viewBox="0 0 32 32" width="${size}" height="${size}" aria-hidden="true">${ICON[id] || ''}</svg>`;
+
+// ختم الشارة: نجمة ثمانية بطابع الزخرفة العُمانية
+function seal(label, color = 'var(--gold)', cls = 'seal') {
+  return `<svg class="${cls}" viewBox="0 0 100 100" aria-hidden="true">
+    <g fill="${color}"><rect x="18" y="18" width="64" height="64" rx="6"/><rect x="18" y="18" width="64" height="64" rx="6" transform="rotate(45 50 50)"/></g>
+    <circle cx="50" cy="50" r="27" fill="var(--card)"/><circle cx="50" cy="50" r="23" fill="none" stroke="${color}" stroke-width="2" stroke-dasharray="3 3"/>
+    <text x="50" y="58" text-anchor="middle" font-family="Reem Kufi, sans-serif" font-size="30" fill="${color}">${esc(label)}</text></svg>`;
+}
+const badgeColor = id => id.startsWith('rank') ? 'var(--red)' : (CATS.find(c => c.id === id)?.c || 'var(--gold)');
+
+const rankOf = pts => { let r = RANKS[0], next = null; for (const x of RANKS) { if (pts >= x[0]) r = x; else { next = x; break; } } return { name: r[1], from: r[0], next }; };
+const catLevel = pts => pts < 60 ? 1 : pts < 180 ? 2 : 3;
+const LVL_EDGES = [0, 60, 180, 400];
+
+const S = { uid: null, p: null };
+
+function setNav() {
+  nav.innerHTML = S.p ? `<button class="ghost" data-go="home">الرئيسية</button><button class="ghost" data-go="profile">ملفي</button><button class="ghost" data-go="logout">خروج</button>` : '';
+}
+nav.onclick = async e => {
+  const g = e.target.closest('[data-go]')?.dataset.go; if (!g) return;
+  if (g === 'logout') { await API.logout(); S.uid = S.p = null; return Student.auth(); }
+  Student[g]();
+};
+$('.logo').onclick = () => { if (location.hash === '#admin') return; S.p ? Student.home() : Student.auth(); };
+$('.logo').style.cursor = 'pointer';
+
+function showModal(html) {
+  return new Promise(res => {
+    modalEl.innerHTML = `<div class="modal" role="dialog" aria-modal="true"><div class="card">${html}<button class="btn" id="mclose">رائع!</button></div></div>`;
+    const b = $('#mclose'); b.focus();
+    b.onclick = () => { modalEl.innerHTML = ''; res(); };
+  });
+}
+
+const Student = {
+  auth(mode = 'login') {
+    setNav();
+    app.innerHTML = `
+      <section class="card" style="display:grid;gap:16px">
+        <div><h1 style="font-size:1.7rem">أهلًا بك في رحلة المعرفة</h1>
+        <p class="muted" style="margin:6px 0 0">أسئلة في القراءة والذكاء والرياضيات وتاريخ عُمان والعرب وديننا الإسلامي، من الصف الأول إلى الثاني عشر.</p></div>
+        <div class="tabs" role="tablist">
+          <button data-m="login" class="${mode === 'login' ? 'on' : ''}">دخول</button>
+          <button data-m="reg" class="${mode === 'reg' ? 'on' : ''}">حساب جديد</button>
+        </div>
+        <form class="form" id="af">
+          <label class="f">اسمك<input id="an" autocomplete="username" required placeholder="مثال: سالم بن خالد"></label>
+          <label class="f">الرمز السري<input id="ap" type="password" autocomplete="${mode === 'reg' ? 'new-password' : 'current-password'}" required minlength="6" placeholder="6 خانات على الأقل"></label>
+          ${mode === 'reg' ? `
+            <div class="f"><span>صفّك الدراسي</span><div class="grades" id="ag">${[...Array(12)].map((_, i) => `<button type="button" data-g="${i + 1}">${i + 1}</button>`).join('')}</div></div>
+            <div class="f"><span>اختر صورتك</span><div class="avatars" id="aa">${AVATARS.map((a, i) => `<button type="button" class="${i ? '' : 'on'}" data-a="${a}" aria-label="صورة ${i + 1}">${a}</button>`).join('')}</div></div>` : ''}
+          <div class="err" id="ae"></div>
+          <button class="btn block">${mode === 'reg' ? 'ابدأ الرحلة' : 'دخول'}</button>
+        </form>
+        ${API.live ? '' : '<p class="small muted" style="margin:0">الوضع التجريبي: البيانات تُحفظ في هذا الجهاز فقط حتى يُربط الموقع بقاعدة البيانات.</p>'}
+      </section>
+      <p class="foot"><button class="link" onclick="location.hash='admin'">دخول المسؤول</button></p>`;
+    app.querySelector('.tabs').onclick = e => { const m = e.target.dataset.m; if (m) Student.auth(m); };
+    let grade = 0, avatar = AVATARS[0];
+    $('#ag')?.addEventListener('click', e => { const b = e.target.closest('[data-g]'); if (!b) return; grade = +b.dataset.g; [...$('#ag').children].forEach(x => x.classList.toggle('on', x === b)); });
+    $('#aa')?.addEventListener('click', e => { const b = e.target.closest('[data-a]'); if (!b) return; avatar = b.dataset.a; [...$('#aa').children].forEach(x => x.classList.toggle('on', x === b)); });
+    $('#af').onsubmit = async e => {
+      e.preventDefault(); const er = $('#ae'); er.textContent = '';
+      const btn = e.submitter; btn.disabled = true;
+      try {
+        if (mode === 'reg' && !grade) throw new Error('اختر صفّك الدراسي.');
+        S.uid = mode === 'reg' ? await API.register($('#an').value, $('#ap').value, grade, avatar) : await API.login($('#an').value, $('#ap').value);
+        S.p = await API.profile(S.uid);
+        Student.home();
+      } catch (x) { er.textContent = x.message; btn.disabled = false; }
+    };
+  },
+
+  heroHTML() {
+    const p = S.p, r = rankOf(p.points);
+    const pct = r.next ? Math.round((p.points - r.from) / (r.next[0] - r.from) * 100) : 100;
+    return `<section class="card" style="display:grid;gap:12px">
+      <div class="hero"><div class="av">${esc(p.avatar)}</div>
+        <div class="row" style="justify-content:space-between">
+          <div class="grow"><h2>${esc(p.name)}</h2><div class="small"><span class="rank">${r.name}</span> · <span class="muted">الصف ${GRADE_NAMES[p.grade]}</span></div></div>
+          <div style="text-align:left"><div class="pts">${p.points}</div><div class="small muted">نقطة</div></div>
+        </div></div>
+      <div class="bar" aria-label="التقدم إلى اللقب التالي"><i style="width:${pct}%"></i></div>
+      <div class="small muted">${r.next ? `باقي ${r.next[0] - p.points} نقطة للقب «${r.next[1]}»` : 'وصلت أعلى لقب! أنت أسطورة.'}</div>
+    </section>`;
+  },
+
+  async home() {
+    setNav(); scrollTo(0, 0);
+    const p = S.p;
+    app.innerHTML = `${this.heroHTML()}
+      <section style="display:grid;gap:12px"><h2 style="font-size:1.25rem">اختر ميدانك</h2>
+        <div class="cats">${CATS.map(c => {
+          const pts = p.cats?.[c.id]?.pts || 0, l = catLevel(pts), pct = l === 3 ? 100 : Math.round((pts - LVL_EDGES[l - 1]) / (LVL_EDGES[l] - LVL_EDGES[l - 1]) * 100);
+          return `<button class="cat" style="--c:${c.c}" data-c="${c.id}">${icon(c.id)}<b>${c.name}</b>
+            <span class="small">المرحلة ${l} · ${pts} نقطة</span><div class="bar"><i style="width:${pct}%"></i></div></button>`;
+        }).join('')}</div></section>
+      <section class="card lb" id="lb"><h2 style="font-size:1.15rem">لوحة الأبطال</h2><p class="muted small">جارٍ التحميل…</p></section>`;
+    app.querySelector('.cats').onclick = e => { const b = e.target.closest('[data-c]'); if (b) Student.play(b.dataset.c); };
+    this.leaderboard('grade');
+  },
+
+  async leaderboard(scope) {
+    const el = $('#lb'); if (!el) return;
+    let list = []; try { list = await API.leaderboard(); } catch {}
+    if (scope === 'grade') list = list.filter(x => x.grade === S.p.grade);
+    const myIdx = list.findIndex(x => x.uid === S.uid);
+    el.innerHTML = `<div class="row" style="justify-content:space-between"><h2 style="font-size:1.15rem">لوحة الأبطال</h2>
+      <div class="tabs" style="width:auto"><button data-s="grade" class="${scope === 'grade' ? 'on' : ''}">صفّي</button><button data-s="all" class="${scope === 'all' ? 'on' : ''}">الكل</button></div></div>
+      <ol>${list.slice(0, 10).map((x, i) => `<li class="${x.uid === S.uid ? 'me' : ''}"><span class="num">${i + 1}</span><span>${esc(x.avatar)}</span><span>${esc(x.name)} <span class="small muted">· ص${x.grade}</span></span><span class="num">${x.points}</span></li>`).join('') || '<li class="muted">لا يوجد أبطال بعد. كن الأول!</li>'}</ol>
+      ${myIdx >= 10 ? `<p class="small">ترتيبك: <b>${myIdx + 1}</b></p>` : ''}`;
+    el.querySelector('.tabs').onclick = e => { const s = e.target.dataset.s; if (s) Student.leaderboard(s); };
+  },
+
+  async buildRound(cat) {
+    const g = S.p.grade, lvl = catLevel(S.p.cats?.[cat]?.pts || 0), N = 8;
+    let seen = []; try { seen = JSON.parse(localStorage.getItem('bm_seen_' + S.uid)) || []; } catch {}
+    const bank = (await API.questions()).filter(q => q.cat === cat && q.active !== false && q.gmin <= g && g <= q.gmax);
+    // المستوى الحالي أولًا، ثم الأسهل، مع تقديم ما لم يُرَ من قبل
+    const score = q => (seen.includes(q.id) ? 10 : 0) + ((q.lvl || 1) > lvl ? 20 : 0) + Math.abs(lvl - (q.lvl || 1)) + Math.random();
+    let pool = bank.sort((a, b) => score(a) - score(b));
+    const genN = cat === 'math' ? N - Math.min(2, pool.length) : cat === 'iq' ? N - Math.min(4, pool.length) : 0;
+    let qs = pool.slice(0, N - genN);
+    for (let i = 0; i < genN; i++) qs.push(cat === 'math' ? mathQ(g, lvl) : iqQ(g, lvl));
+    if (cat === 'reading') qs.sort((a, b) => (a.passage || '').localeCompare(b.passage || '')); // أسئلة النص الواحد متتالية
+    else qs = shuffle(qs);
+    return { qs, seen };
+  },
+
+  async play(cat) {
+    const c = catOf(cat);
+    app.innerHTML = `<section class="card"><p class="muted">جارٍ تجهيز الأسئلة…</p></section>`;
+    const { qs, seen } = await this.buildRound(cat);
+    if (!qs.length) { app.innerHTML = `<section class="card"><p>لا توجد أسئلة لصفّك في هذه الفئة بعد. سيضيفها المسؤول قريبًا.</p><button class="btn" onclick="Student.home()">رجوع</button></section>`; return; }
+    const R = { cat, i: 0, score: 0, correct: 0, streak: 0, best: 0 };
+    let timer = null;
+    const next = () => {
+      clearInterval(timer);
+      if (R.i >= qs.length) return this.finish(R, qs, seen);
+      const q = qs[R.i], opts = shuffle(q.opts.map((t, k) => ({ t, ok: k === (q.a || 0) })));
+      const T = c.t; let left = T;
+      app.innerHTML = `<section class="card" style="display:grid;gap:14px;--c:${c.c}">
+        <div class="qtop"><span class="row" style="color:${c.c}">${icon(cat, 24)}<b>${c.name}</b></span>
+          <span class="small"><span class="streak">${R.streak >= 3 ? '🔥 ' + R.streak : ''}</span> سؤال ${R.i + 1} من ${qs.length} · <b>${R.score}</b> نقطة</span></div>
+        <div class="timer" id="tm"><i></i></div>
+        ${q.passage ? `<div class="passage">${esc(q.passage)}</div>` : ''}
+        <div class="qtext" ${/^[\d\s+\-−×÷=؟.\/()]+$/.test(q.q) ? 'dir="ltr" style="text-align:right"' : ''}>${esc(q.q)}</div>
+        <div class="opts">${opts.map((o, k) => `<button class="opt" data-k="${k}">${esc(o.t)}</button>`).join('')}</div>
+        <div class="feedback" id="fb"></div>
+        <button class="btn green" id="nx" hidden>${R.i + 1 < qs.length ? 'السؤال التالي' : 'النتيجة'}</button>
+      </section>`;
+      const bar = $('#tm i'), tm = $('#tm');
+      timer = setInterval(() => {
+        left -= .25; bar.style.width = (left / T * 100) + '%'; tm.classList.toggle('low', left < T * .25);
+        if (left <= 0) answer(-1);
+      }, 250);
+      const answer = k => {
+        clearInterval(timer);
+        const ok = k >= 0 && opts[k].ok;
+        app.querySelectorAll('.opt').forEach((b, j) => { b.disabled = true; if (opts[j].ok) b.classList.add('ok'); else if (j === k) b.classList.add('bad'); });
+        const fb = $('#fb');
+        if (ok) {
+          R.streak++; R.best = Math.max(R.best, R.streak); R.correct++;
+          const pts = 10 + Math.ceil(left / T * 5) + (R.streak >= 3 ? 2 : 0);
+          R.score += pts; fb.className = 'feedback ok';
+          fb.textContent = `أحسنت! +${pts}` + (R.streak >= 3 ? ` (سلسلة ${R.streak})` : '');
+        } else {
+          R.streak = 0; fb.className = 'feedback bad';
+          fb.textContent = k < 0 ? 'انتهى الوقت. الإجابة الصحيحة مظلّلة بالأخضر.' : 'ليست هذه. تعلّم الإجابة الصحيحة المظلّلة بالأخضر.';
+        }
+        if (!q.gen) seen.push(q.id);
+        R.i++; const nx = $('#nx'); nx.hidden = false; nx.focus(); nx.onclick = next;
+      };
+      app.querySelector('.opts').onclick = e => { const b = e.target.closest('[data-k]'); if (b && !b.disabled) answer(+b.dataset.k); };
+    };
+    next();
+  },
+
+  async finish(R, qs, seen) {
+    try { localStorage.setItem('bm_seen_' + S.uid, JSON.stringify([...new Set(seen)].slice(-400))); } catch {}
+    const p = S.p, total = qs.length;
+    const oldRank = rankOf(p.points).name;
+    const cs = p.cats?.[R.cat] || { pts: 0, correct: 0, answered: 0 };
+    const days = [...new Set([...(p.days || []), today()])].slice(-60);
+    const np = {
+      ...p, points: p.points + R.score, games: p.games + 1, correct: p.correct + R.correct, answered: p.answered + total,
+      perfects: (p.perfects || 0) + (R.correct === total ? 1 : 0), bestStreak: Math.max(p.bestStreak || 0, R.best), days,
+      cats: { ...p.cats, [R.cat]: { pts: cs.pts + R.score, correct: cs.correct + R.correct, answered: cs.answered + total } }
+    };
+    const fresh = BADGES.filter(([id, , , ok]) => ok(np) && !(p.badges || []).includes(id));
+    np.badges = [...(p.badges || []), ...fresh.map(b => b[0])];
+    const { name, grade, avatar, createdAt, lastLogin, logins, ...patch } = np;
+    try { await API.update(S.uid, patch); await API.log(S.uid, { type: 'game', cat: R.cat, score: R.score, correct: R.correct, total }); }
+    catch { /* يبقى العرض حتى لو فشل الحفظ */ }
+    S.p = np;
+    const stars = R.correct === total ? 3 : R.correct >= total * .7 ? 2 : R.correct >= total * .4 ? 1 : 0;
+    const msg = ['حاول مرة أخرى، كل محاولة تعلّمك شيئًا جديدًا.', 'بداية جيدة! واصل التدريب.', 'رائع! أنت قريب من القمة.', 'علامة كاملة! أنت بطل حقيقي.'][stars];
+    app.innerHTML = `<section class="card result">
+      <div class="eyebrow">${catOf(R.cat).name}</div>
+      <div class="stars" aria-label="${stars} نجوم">${'★'.repeat(stars)}<span style="opacity:.25">${'★'.repeat(3 - stars)}</span></div>
+      <div class="big">+${R.score}</div>
+      <p style="margin:0">${R.correct} إجابات صحيحة من ${total}${R.best >= 3 ? ` · أفضل سلسلة ${R.best}` : ''}</p>
+      <p class="muted" style="margin:0">${msg}</p>
+      <div class="row" style="justify-content:center"><button class="btn" id="again">جولة جديدة</button><button class="ghost" onclick="Student.home()">الرئيسية</button></div>
+    </section>`;
+    $('#again').onclick = () => Student.play(R.cat);
+    for (const [id, bn, desc] of fresh) {
+      await showModal(`<div class="eyebrow">شارة جديدة</div>${seal(bn[0], badgeColor(id))}
+        <h2>${esc(bn)}</h2><p class="muted" style="margin:0">${esc(desc)}</p><p class="quote">${esc(QUOTES[Math.random() * QUOTES.length | 0])}</p>`);
+    }
+    const nr = rankOf(np.points).name;
+    if (nr !== oldRank && !fresh.some(b => b[0].startsWith('rank'))) await showModal(`<div class="eyebrow">لقب جديد</div><h2>${nr}</h2><p class="quote">${esc(QUOTES[0])}</p>`);
+  },
+
+  async profile() {
+    setNav(); scrollTo(0, 0);
+    const p = S.p = await API.profile(S.uid);
+    const acc = p.answered ? Math.round(p.correct / p.answered * 100) : 0;
+    app.innerHTML = `${this.heroHTML()}
+      <section class="card" style="display:grid;gap:12px"><h2 style="font-size:1.15rem">إحصاءاتي</h2>
+        <div class="stats">
+          <div class="stat"><span class="small muted">الجولات</span><b>${p.games}</b></div>
+          <div class="stat"><span class="small muted">الدقة</span><b>${acc}%</b></div>
+          <div class="stat"><span class="small muted">أفضل سلسلة</span><b>${p.bestStreak || 0}</b></div>
+          <div class="stat"><span class="small muted">أيام اللعب</span><b>${(p.days || []).length}</b></div>
+        </div>
+        ${CATS.map(c => { const s = p.cats?.[c.id] || { pts: 0, correct: 0, answered: 0 };
+          return `<div class="row"><span style="color:${c.c}">${icon(c.id, 22)}</span><span class="grow">${c.name}</span><span class="small muted">${s.answered ? Math.round(s.correct / s.answered * 100) + '% دقة · ' : ''}${s.pts} نقطة</span></div>`; }).join('')}
+      </section>
+      <section class="card" style="display:grid;gap:12px"><h2 style="font-size:1.15rem">شاراتي <span class="small muted">(${(p.badges || []).length} من ${BADGES.length})</span></h2>
+        <div class="badges">${BADGES.map(([id, n, d]) => `<div class="badge ${(p.badges || []).includes(id) ? '' : 'locked'}">${seal(n[0], badgeColor(id))}<b>${esc(n)}</b><span>${esc(d)}</span></div>`).join('')}</div>
+      </section>
+      <section class="card" style="display:grid;gap:10px"><h2 style="font-size:1.15rem">آخر جولاتي</h2><div id="hist" class="small muted">جارٍ التحميل…</div></section>
+      <section class="card form"><h2 style="font-size:1.15rem">تعديل ملفي</h2>
+        <div class="f"><span>صورتي</span><div class="avatars" id="pa">${AVATARS.map(a => `<button type="button" class="${a === p.avatar ? 'on' : ''}" data-a="${a}">${a}</button>`).join('')}</div></div>
+        <label class="f">صفّي<select id="pg">${GRADE_NAMES.slice(1).map((n, i) => `<option value="${i + 1}" ${i + 1 === p.grade ? 'selected' : ''}>الصف ${n}</option>`).join('')}</select></label>
+        <button class="btn green" id="ps">حفظ</button><div class="small" id="pm"></div>
+      </section>`;
+    let av = p.avatar;
+    $('#pa').onclick = e => { const b = e.target.closest('[data-a]'); if (!b) return; av = b.dataset.a; [...$('#pa').children].forEach(x => x.classList.toggle('on', x === b)); };
+    $('#ps').onclick = async () => { await API.update(S.uid, { avatar: av, grade: +$('#pg').value }); S.p = await API.profile(S.uid); $('#pm').textContent = 'تم الحفظ.'; };
+    const games = (await API.activity(S.uid, 40)).filter(a => a.type === 'game').slice(0, 10);
+    $('#hist').innerHTML = games.length ? games.map(a => `<div class="row" style="padding:6px 0;border-bottom:1px solid var(--line)"><span class="grow" style="color:var(--ink)">${catOf(a.cat).name}</span><span>${a.correct}/${a.total}</span><b style="color:var(--gold)">+${a.score}</b><span>${fmtTime(a.at)}</span></div>`).join('') : 'لم تلعب أي جولة بعد.';
+  }
+};
+
+async function route() {
+  if (location.hash === '#admin') return Admin.render();
+  S.uid = API.me();
+  S.p = S.uid ? await API.profile(S.uid) : null;
+  if (S.p && !(await API.isAdmin())) Student.home(); else { S.p = null; Student.auth(); }
+}
+addEventListener('hashchange', route);
+API.boot().then(route).catch(e => { app.innerHTML = `<section class="card"><p class="err">تعذّر الاتصال بقاعدة البيانات: ${esc(e.message)}</p></section>`; });

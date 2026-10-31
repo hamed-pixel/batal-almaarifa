@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://hamed-pixel.github.io/batal-almaarifa/sitemap.xml

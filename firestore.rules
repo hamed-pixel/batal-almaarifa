@@ -1,0 +1,35 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function signedIn() { return request.auth != null; }
+    function isAdmin() { return signedIn() && exists(/databases/$(database)/documents/admins/$(request.auth.uid)); }
+    function isMe(uid) { return signedIn() && request.auth.uid == uid; }
+
+    // المسؤولون: يُضافون يدويًا من لوحة Firebase
+    match /admins/{uid} { allow read: if isMe(uid); allow write: if false; }
+
+    // ملف الطالب: يقرؤه ويعدّله صاحبه، والمسؤول يرى الجميع
+    match /users/{uid} {
+      allow read: if isMe(uid) || isAdmin();
+      allow create, update: if isMe(uid) || isAdmin();
+      allow delete: if isAdmin();
+      match /activity/{id} {
+        allow create: if isMe(uid);
+        allow read: if isMe(uid) || isAdmin();
+        allow update, delete: if isAdmin();
+      }
+    }
+
+    // لوحة الأبطال: الاسم والصف والنقاط فقط
+    match /leaderboard/{uid} {
+      allow read: if signedIn();
+      allow write: if isMe(uid) || isAdmin();
+    }
+
+    // الأسئلة: يقرؤها كل من سجّل، ويعدّلها المسؤول فقط
+    match /questions/{id} {
+      allow read: if signedIn();
+      allow write: if isAdmin();
+    }
+  }
+}
