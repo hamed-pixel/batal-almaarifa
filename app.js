@@ -9,6 +9,10 @@ const AVATARS = ['🐪', '🦅', '🐢', '🐎', '🐬', '🦌', '🌴', '⛵', 
 const GRADE_NAMES = ['', 'الأول', 'الثاني', 'الثالث', 'الرابع', 'الخامس', 'السادس', 'السابع', 'الثامن', 'التاسع', 'العاشر', 'الحادي عشر', 'الثاني عشر'];
 
 const ICON = {
+  arabic: '<text x="16" y="25" text-anchor="middle" font-size="24" font-weight="700" fill="currentColor" font-family="Reem Kufi, sans-serif">ض</text>',
+  islamic: '<path d="M20 5a11 11 0 1 0 7 19A9 9 0 1 1 20 5z" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linejoin="round"/><path d="M22 12l1 3h3l-2.5 2 1 3-2.5-2-2.5 2 1-3-2.5-2h3z" fill="currentColor"/>',
+  social: '<circle cx="16" cy="16" r="11" fill="none" stroke="currentColor" stroke-width="2.4"/><path d="M5 16h22M16 5c4 4 4 18 0 22M16 5c-4 4-4 18 0 22" fill="none" stroke="currentColor" stroke-width="2"/>',
+  english: '<path d="M5 26L11 6h2l6 20M7.5 19h9" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/><path d="M21 13h6M21 19h5M21 25h6M21 13v12" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/>',
   science: '<path d="M12 4h8M13 4v9L6 26a2 2 0 0 0 2 3h16a2 2 0 0 0 2-3l-7-13V4" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linejoin="round"/><path d="M9 21h14" stroke="currentColor" stroke-width="2.4"/>',
   reading: '<path d="M4 7c4-2 8-2 12 1 4-3 8-3 12-1v18c-4-2-8-2-12 1-4-3-8-3-12-1z" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linejoin="round"/><path d="M16 8v18" stroke="currentColor" stroke-width="2.4"/>',
   iq: '<circle cx="16" cy="13" r="8" fill="none" stroke="currentColor" stroke-width="2.4"/><path d="M12 24h8M13 28h6M16 9v4l3 2" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/>',
@@ -20,11 +24,15 @@ const ICON = {
 const CATS = [
   { id: 'reading', name: 'بطل القراءة', c: '#8A5A12', t: 50 },
   { id: 'iq', name: 'الذكاء وتمرين المخ', c: '#5B3FA0', t: 40 },
-  { id: 'math', name: 'الرياضيات', c: '#1F5FA8', t: 45 },
+  { id: 'math', name: 'الرياضيات', c: '#1F5FA8', t: 45, curr: true },
   { id: 'oman', name: 'تاريخ عُمان', c: '#A8161F', t: 30 },
   { id: 'arab', name: 'العرب', c: '#155C3E', t: 30 },
   { id: 'islam', name: 'ديننا الإسلامي', c: '#0E7C86', t: 30 },
-  { id: 'science', name: 'العلوم', c: '#B4530A', t: 40, curr: true } // من المنهج: الفصل الأول والثاني منفصلان
+  { id: 'science', name: 'العلوم', c: '#B4530A', t: 40, curr: true }, // من المنهج: الفصل الأول والثاني منفصلان
+  { id: 'arabic', name: 'اللغة العربية', c: '#7A3E9D', t: 40, curr: true },
+  { id: 'islamic', name: 'التربية الإسلامية', c: '#0F766E', t: 35, curr: true },
+  { id: 'social', name: 'الدراسات الاجتماعية', c: '#9A6B00', t: 35, curr: true },
+  { id: 'english', name: 'اللغة الإنجليزية', c: '#B91C1C', t: 40, curr: true }
 ];
 const catOf = id => CATS.find(c => c.id === id) || { name: id, c: '#666' };
 const icon = (id, size = 36) => `<svg viewBox="0 0 32 32" width="${size}" height="${size}" aria-hidden="true">${ICON[id] || ''}</svg>`;
@@ -82,12 +90,12 @@ $('.logo').onclick = () => { if (location.hash === '#admin') return; S.p ? Stude
 $('.logo').style.cursor = 'pointer';
 
 // إعلان في أعلى الصفحة الرئيسية؛ يُخفى عند الإغلاق في هذا الجهاز
-const NEWS_ID = 'curr1';
+const NEWS_ID = 'curr2';
 function newsHTML() {
   try { if (localStorage.getItem('bm_news') === NEWS_ID) return ''; } catch {}
   return `<section class="card news" style="display:grid;gap:8px;border-color:var(--gold);background:color-mix(in srgb, var(--gold) 10%, var(--card))">
     <div class="row" style="justify-content:space-between"><b>🎉 أخيرًا! صارت المناهج الدراسية في الموقع</b><button class="ghost" onclick="try{localStorage.setItem('bm_news','${NEWS_ID}')}catch{};this.closest('.news').remove()" aria-label="إغلاق">✕</button></div>
-    <p style="margin:0">أضفنا مادة <b>العلوم</b> بأسئلة من دروس كتابك المدرسي لصفّك. و<b>الفصل الأول والفصل الثاني منفصلان</b>: اختر فصلك وابدأ التحدي! وقريبًا مواد أخرى.</p>
+    <p style="margin:0">صارت كل موادك هنا: <b>العلوم، الرياضيات، اللغة العربية، التربية الإسلامية، الدراسات الاجتماعية، اللغة الإنجليزية</b>. الأسئلة من دروس كتابك المدرسي، و<b>الفصل الأول والفصل الثاني منفصلان</b>. العلوم جاهزة الآن، والمواد اللي عليها «قريبًا» تنضاف أسئلتها تباعًا.</p>
   </section>`;
 }
 
@@ -156,12 +164,14 @@ const Student = {
   async home() {
     setNav(); scrollTo(0, 0);
     const p = S.p;
+    let bank = []; try { bank = await API.questions(); } catch {}
+    const ready = id => id === 'math' || id === 'iq' || bank.some(q => q.cat === id && q.active !== false && q.gmin <= p.grade && p.grade <= q.gmax);
     app.innerHTML = `${newsHTML()}${this.heroHTML()}
       <section style="display:grid;gap:12px"><h2 style="font-size:1.25rem">اختر ميدانك</h2>
         <div class="cats">${CATS.map(c => {
           const pts = p.cats?.[c.id]?.pts || 0, l = catLevel(pts), pct = l === MAX_LVL ? 100 : Math.round((pts - LVL_EDGES[l - 1]) / (LVL_EDGES[l] - LVL_EDGES[l - 1]) * 100);
           return `<button class="cat" style="--c:${c.c}" data-c="${c.id}">${icon(c.id)}<b>${c.name}</b>
-            <span class="small">${c.curr ? '<span class="chip">من منهجك</span> ' : ''}المرحلة ${l} من ${MAX_LVL} · ${pts} نقطة</span><div class="bar"><i style="width:${pct}%"></i></div></button>`;
+            <span class="small">${!ready(c.id) ? '<span class="chip">قريبًا</span> ' : c.curr ? '<span class="chip">من منهجك</span> ' : ''}المرحلة ${l} من ${MAX_LVL} · ${pts} نقطة</span><div class="bar"><i style="width:${pct}%"></i></div></button>`;
         }).join('')}</div></section>
       <section class="card lb" id="lb"><h2 style="font-size:1.15rem">لوحة الأبطال</h2><p class="muted small">جارٍ التحميل…</p></section>`;
     app.querySelector('.cats').onclick = e => { const b = e.target.closest('[data-c]'); if (b) Student.play(b.dataset.c); };
@@ -187,7 +197,7 @@ const Student = {
     // المستوى الحالي أولًا، ثم الأسهل، مع تقديم ما لم يُرَ من قبل
     const score = q => (seen.includes(q.id) ? 10 : 0) + ((q.lvl || 1) > lvl ? 20 : 0) + Math.abs(lvl - (q.lvl || 1)) + Math.random();
     let pool = bank.sort((a, b) => score(a) - score(b));
-    const genN = cat === 'math' ? N - Math.min(2, pool.length) : cat === 'iq' ? N - Math.min(4, pool.length) : 0;
+    const genN = cat === 'math' ? N - Math.min(N, pool.length) : cat === 'iq' ? N - Math.min(4, pool.length) : 0;
     let qs = pool.slice(0, N - genN);
     for (let i = 0; i < genN; i++) qs.push(cat === 'math' ? mathQ(g, lvl) : iqQ(g, lvl));
     if (cat === 'reading') qs.sort((a, b) => (a.passage || '').localeCompare(b.passage || '')); // أسئلة النص الواحد متتالية
@@ -208,7 +218,7 @@ const Student = {
     }
     app.innerHTML = `<section class="card"><p class="muted">جارٍ تجهيز الأسئلة…</p></section>`;
     const { qs, seen } = await this.buildRound(cat, sem);
-    if (!qs.length) { app.innerHTML = `<section class="card"><p>لا توجد أسئلة لصفّك ${sem ? `في الفصل ${sem === 1 ? 'الأول' : 'الثاني'} ` : ''}في هذه الفئة بعد. سيضيفها المسؤول قريبًا.</p><button class="btn" onclick="Student.home()">رجوع</button></section>`; return; }
+    if (!qs.length) { app.innerHTML = `<section class="card"><p>⏳ أسئلة ${c.name} لصفّك ${sem ? `في الفصل ${sem === 1 ? 'الأول' : 'الثاني'} ` : ''}قيد الإعداد من كتابك المدرسي، وتنضاف قريبًا إن شاء الله.</p><button class="btn" onclick="Student.home()">رجوع</button></section>`; return; }
     const R = { cat, sem, i: 0, score: 0, correct: 0, streak: 0, best: 0, hint: false, cut: false };
     let timer = null;
     const next = () => {
