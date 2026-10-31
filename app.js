@@ -51,7 +51,7 @@ const qid = q => q.gen ? 'g:' + q.q : q.id;
 async function unitsInfo(cat, sem) {
   const g = S.p.grade, done = new Set(S.p.done || []);
   const inSem = (await API.questions()).filter(q => q.cat === cat && q.active !== false && q.gmin <= g && g <= q.gmax && (!q.sem || q.sem === sem) && q.unit);
-  const num = u => +(u.match(/الوحدة (\d+)/) || [])[1] || 0;
+  const num = u => +(u.match(/الوحد(?:ة|ات|تان) (\d+)/) || [])[1] || 0;
   return [...new Set(inSem.map(q => q.unit))].sort((a, b) => num(a) - num(b) || a.localeCompare(b, 'ar'))
     .map(u => { const qs = inSem.filter(q => q.unit === u); return { u, n: num(u), total: qs.length, left: qs.filter(q => !done.has(q.id)).length }; });
 }
