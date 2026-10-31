@@ -9,6 +9,7 @@ const AVATARS = ['🐪', '🦅', '🐢', '🐎', '🐬', '🦌', '🌴', '⛵', 
 const GRADE_NAMES = ['', 'الأول', 'الثاني', 'الثالث', 'الرابع', 'الخامس', 'السادس', 'السابع', 'الثامن', 'التاسع', 'العاشر', 'الحادي عشر', 'الثاني عشر'];
 
 const ICON = {
+  mathc: '<rect x="6" y="4" width="20" height="24" rx="3" fill="none" stroke="currentColor" stroke-width="2.4"/><path d="M10 10h12M11 16h2M15 16h2M19 16h2M11 21h2M15 21h2M19 21h2" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/>',
   physics: '<circle cx="16" cy="16" r="2.6" fill="currentColor"/><ellipse cx="16" cy="16" rx="12" ry="5" fill="none" stroke="currentColor" stroke-width="2"/><ellipse cx="16" cy="16" rx="12" ry="5" transform="rotate(60 16 16)" fill="none" stroke="currentColor" stroke-width="2"/><ellipse cx="16" cy="16" rx="12" ry="5" transform="rotate(-60 16 16)" fill="none" stroke="currentColor" stroke-width="2"/>',
   chemistry: '<path d="M12 4h8M13 4v9L6 26a2 2 0 0 0 2 3h16a2 2 0 0 0 2-3l-7-13V4" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linejoin="round"/><circle cx="13" cy="22" r="1.6" fill="currentColor"/><circle cx="19" cy="24" r="1.6" fill="currentColor"/><circle cx="17" cy="19" r="1.2" fill="currentColor"/>',
   biology: '<path d="M10 4c0 6 12 6 12 12s-12 6-12 12M22 4c0 6-12 6-12 12s12 6 12 12M11 9h10M11 23h10M13 16h6" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/>',
@@ -28,7 +29,7 @@ const ICON = {
 const CATS = [
   { id: 'reading', name: 'بطل القراءة', c: '#8A5A12', t: 50 },
   { id: 'iq', name: 'الذكاء وتمرين المخ', c: '#5B3FA0', t: 40 },
-  { id: 'math', name: 'الرياضيات', c: '#1F5FA8', t: 45, curr: true },
+  { id: 'math', name: 'تحدي الأرقام', c: '#1F5FA8', t: 45 }, // أسئلة حساب مولّدة تلقائيًا (غير المنهج)
   { id: 'oman', name: 'تاريخ عُمان', c: '#A8161F', t: 30 },
   { id: 'arab', name: 'العرب', c: '#155C3E', t: 30 },
   { id: 'islam', name: 'ديننا الإسلامي', c: '#0E7C86', t: 30 },
@@ -38,6 +39,7 @@ const CATS = [
   { id: 'chemistry', name: 'الكيمياء', c: '#B4530A', t: 50, curr: true, grades: [11, 12] },
   { id: 'biology', name: 'الأحياء', c: '#15803D', t: 45, curr: true, grades: [11, 12] },
   { id: 'envsci', name: 'العلوم البيئية', c: '#0E7490', t: 45, curr: true, grades: [11, 12] },
+  { id: 'mathc', name: 'الرياضيات', c: '#2563EB', t: 60, curr: true }, // رياضيات المنهج من كتب الوزارة
   { id: 'arabic', name: 'اللغة العربية', c: '#7A3E9D', t: 40, curr: true },
   { id: 'islamic', name: 'التربية الإسلامية', c: '#0F766E', t: 35, curr: true },
   { id: 'social', name: 'الدراسات الاجتماعية', c: '#9A6B00', t: 35, curr: true },
@@ -200,14 +202,14 @@ const Student = {
     el.querySelector('.tabs').onclick = e => { const s = e.target.dataset.s; if (s) Student.leaderboard(s); };
   },
 
-  async buildRound(cat, sem) {
+  async buildRound(cat, sem, unit) {
     const g = S.p.grade, lvl = catLevel(S.p.cats?.[cat]?.pts || 0), N = 8;
     let seen = []; try { seen = JSON.parse(localStorage.getItem('bm_seen_' + S.uid)) || []; } catch {}
-    const bank = (await API.questions()).filter(q => q.cat === cat && q.active !== false && q.gmin <= g && g <= q.gmax && (!sem || !q.sem || q.sem === sem));
+    const bank = (await API.questions()).filter(q => q.cat === cat && q.active !== false && q.gmin <= g && g <= q.gmax && (!sem || !q.sem || q.sem === sem) && (!unit || unit === '*' || q.unit === unit));
     // المستوى الحالي أولًا، ثم الأسهل، مع تقديم ما لم يُرَ من قبل
     const score = q => (seen.includes(q.id) ? 10 : 0) + ((q.lvl || 1) > lvl ? 20 : 0) + Math.abs(lvl - (q.lvl || 1)) + Math.random();
     let pool = bank.sort((a, b) => score(a) - score(b));
-    const genN = cat === 'math' ? N - Math.min(N, pool.length) : cat === 'iq' ? N - Math.min(4, pool.length) : 0;
+    const genN = cat === 'math' ? N - Math.min(2, pool.length) : cat === 'iq' ? N - Math.min(4, pool.length) : 0;
     let qs = pool.slice(0, N - genN);
     for (let i = 0; i < genN; i++) qs.push(cat === 'math' ? mathQ(g, lvl) : iqQ(g, lvl));
     if (cat === 'reading') qs.sort((a, b) => (a.passage || '').localeCompare(b.passage || '')); // أسئلة النص الواحد متتالية
@@ -215,8 +217,23 @@ const Student = {
     return { qs, seen };
   },
 
-  async play(cat, sem) {
+  async play(cat, sem, unit) {
     const c = catOf(cat);
+    if (c.curr && sem && !unit) {  // اختيار الوحدة من كتاب الطالب
+      const g = S.p.grade, inSem = (await API.questions()).filter(q => q.cat === cat && q.active !== false && q.gmin <= g && g <= q.gmax && (!q.sem || q.sem === sem) && q.unit);
+      const cnt = u => inSem.filter(q => q.unit === u).length, units = [...new Set(inSem.map(q => q.unit))]
+        .sort((a, b) => (+(a.match(/الوحدة (\d+)/) || [])[1] || 0) - (+(b.match(/الوحدة (\d+)/) || [])[1] || 0) || a.localeCompare(b, 'ar'));
+      if (units.length) {
+        app.innerHTML = `<section class="card" style="display:grid;gap:12px;--c:${c.c}">
+          <div class="row" style="color:${c.c}">${icon(cat, 28)}<h2 style="font-size:1.25rem">${c.name} · الفصل ${sem === 1 ? 'الأول' : 'الثاني'}</h2></div>
+          <p class="muted" style="margin:0">اختر الوحدة من كتابك، أو العب أسئلة كل الوحدات.</p>
+          <div id="units" style="display:grid;gap:8px">${units.map((u, i) => `<button class="opt row" data-u="${i}" style="justify-content:space-between"><span>${esc(u)}</span><span class="chip">${cnt(u)} ${cnt(u) > 10 ? 'سؤالًا' : cnt(u) > 2 ? 'أسئلة' : cnt(u) === 2 ? 'سؤالان' : 'سؤال'}</span></button>`).join('')}
+            <button class="btn" data-u="*">كل الوحدات</button></div>
+          <button class="ghost" onclick="Student.play('${cat}')">رجوع</button></section>`;
+        $('#units').onclick = e => { const b = e.target.closest('[data-u]'); if (b) Student.play(cat, sem, b.dataset.u === '*' ? '*' : units[+b.dataset.u]); };
+        return;
+      }
+    }
     if (c.curr && !sem) {  // مواد المنهج: يختار الطالب الفصل الدراسي
       app.innerHTML = `<section class="card" style="display:grid;gap:14px;--c:${c.c}">
         <div class="row" style="color:${c.c}">${icon(cat, 28)}<h2 style="font-size:1.25rem">${c.name}</h2></div>
@@ -227,9 +244,9 @@ const Student = {
       return;
     }
     app.innerHTML = `<section class="card"><p class="muted">جارٍ تجهيز الأسئلة…</p></section>`;
-    const { qs, seen } = await this.buildRound(cat, sem);
+    const { qs, seen } = await this.buildRound(cat, sem, unit);
     if (!qs.length) { app.innerHTML = `<section class="card"><p>⏳ أسئلة ${c.name} لصفّك ${sem ? `في الفصل ${sem === 1 ? 'الأول' : 'الثاني'} ` : ''}قيد الإعداد من كتابك المدرسي، وتنضاف قريبًا إن شاء الله.</p><button class="btn" onclick="Student.home()">رجوع</button></section>`; return; }
-    const R = { cat, sem, i: 0, score: 0, correct: 0, streak: 0, best: 0, hint: false, cut: false };
+    const R = { cat, sem, unit, i: 0, score: 0, correct: 0, streak: 0, best: 0, hint: false, cut: false };
     let timer = null;
     const next = () => {
       clearInterval(timer);
@@ -315,7 +332,7 @@ const Student = {
       <p class="muted" style="margin:0">${msg}</p>
       <div class="row" style="justify-content:center"><button class="btn" id="again">جولة جديدة</button><button class="ghost" onclick="Student.home()">الرئيسية</button></div>
     </section>`;
-    $('#again').onclick = () => Student.play(R.cat, R.sem);
+    $('#again').onclick = () => Student.play(R.cat, R.sem, R.unit);
     const oldL = catLevel(cs.pts), newL = catLevel(cs.pts + R.score);
     if (newL > oldL) await showModal(`<div class="eyebrow">🎉 مبروك!</div>${seal(String(newL), catOf(R.cat).c)}
       <h2>انتقلت إلى المرحلة ${newL} في ${catOf(R.cat).name}</h2>

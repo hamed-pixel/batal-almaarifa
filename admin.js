@@ -131,7 +131,7 @@ const Admin = {
     const draw = () => {
       const L = all.filter(q => (!f.cat || q.cat === f.cat) && (!f.g || (q.gmin <= +f.g && +f.g <= q.gmax)));
       $('#ql').innerHTML = `<p class="small">${L.length} سؤال</p>` + L.map(q => `<div class="qitem" style="${q.active === false ? 'opacity:.5' : ''}">
-        <div class="row small"><span class="chip">${catOf(q.cat).name}</span><span class="chip">ص ${q.gmin}–${q.gmax}</span><span class="chip">مستوى ${q.lvl || 1}</span>${q.sem ? `<span class="chip">الفصل ${q.sem === 1 ? 'الأول' : 'الثاني'}</span>` : ''}${q.active === false ? '<span class="chip">موقوف</span>' : ''}</div>
+        <div class="row small"><span class="chip">${catOf(q.cat).name}</span><span class="chip">ص ${q.gmin}–${q.gmax}</span><span class="chip">مستوى ${q.lvl || 1}</span>${q.sem ? `<span class="chip">الفصل ${q.sem === 1 ? 'الأول' : 'الثاني'}</span>` : ''}${q.unit ? `<span class="chip">${esc(q.unit)}</span>` : ''}${q.active === false ? '<span class="chip">موقوف</span>' : ''}</div>
         ${q.passage ? `<div class="small muted">نص: ${esc(q.passage.slice(0, 70))}…</div>` : ''}
         <b>${esc(q.q)}</b>
         <div class="small">${q.opts.map((o, i) => i === (q.a || 0) ? `<span class="ans">✓ ${esc(o)}</span>` : esc(o)).join(' · ')}</div>
@@ -162,6 +162,7 @@ const Admin = {
         <label class="f">الفصل<select id="fsem">${[[0, 'الفصلان'], [1, 'الأول'], [2, 'الثاني']].map(([v, n]) => `<option value="${v}" ${v === (q.sem || 0) ? 'selected' : ''}>${n}</option>`).join('')}</select></label>
         <label class="f">المستوى<select id="fl">${[1, 2, 3, 4, 5].map(l => `<option ${l === (q.lvl || 1) ? 'selected' : ''}>${l}</option>`).join('')}</select></label></div>
       <label class="f">نص للقراءة (اختياري)<textarea id="fp" placeholder="للأسئلة التي تعتمد على قطعة قراءة">${esc(q.passage)}</textarea></label>
+      <label class="f">الوحدة (لمواد المنهج، مثل: الوحدة 2: النباتات)<input id="fu" value="${esc(q.unit || '')}"></label>
       <label class="f">السؤال<input id="fq2" value="${esc(q.q)}" required></label>
       <label class="f">الشرح (يظهر للطالب بعد الإجابة، اختياري)<textarea id="fx" placeholder="لماذا هذه هي الإجابة الصحيحة؟">${esc(q.exp || '')}</textarea></label>
       <div class="f"><span>الخيارات (اختر الصحيحة)</span>${q.opts.map((o, i) => `<div class="row"><input type="radio" name="fa" value="${i}" ${i === (q.a || 0) ? 'checked' : ''} style="width:auto" aria-label="الإجابة الصحيحة"><input class="grow" id="fo${i}" value="${esc(o)}" placeholder="الخيار ${i + 1}"></div>`).join('')}</div>
@@ -172,7 +173,7 @@ const Admin = {
       const opts = [0, 1, 2, 3].map(i => $('#fo' + i).value.trim()), gmin = +$('#f1').value, gmax = +$('#f2').value;
       if (!$('#fq2').value.trim() || opts.some(o => !o)) return $('#fe').textContent = 'اكتب السؤال والخيارات الأربعة.';
       if (gmin > gmax) return $('#fe').textContent = '«من صف» يجب أن يكون أصغر من أو يساوي «إلى صف».';
-      await API.saveQuestion({ id: q.id, cat: $('#fc').value, gmin, gmax, lvl: +$('#fl').value, sem: +$('#fsem').value || 0, passage: $('#fp').value.trim(), exp: $('#fx').value.trim(), q: $('#fq2').value.trim(), opts, a: +document.querySelector('[name=fa]:checked').value, active: q.active !== false });
+      await API.saveQuestion({ id: q.id, cat: $('#fc').value, gmin, gmax, lvl: +$('#fl').value, sem: +$('#fsem').value || 0, passage: $('#fp').value.trim(), exp: $('#fx').value.trim(), unit: $('#fu').value.trim(), q: $('#fq2').value.trim(), opts, a: +document.querySelector('[name=fa]:checked').value, active: q.active !== false });
       this.questions();
     };
   },
