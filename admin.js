@@ -153,7 +153,7 @@ const Admin = {
     $('#qform').innerHTML = `<h2 style="font-size:1.15rem">${q.id ? 'تعديل سؤال' : 'إضافة سؤال'}</h2>
       <div class="row"><label class="f grow">الفئة<select id="fc">${CATS.map(c => `<option value="${c.id}" ${q.cat === c.id ? 'selected' : ''}>${c.name}</option>`).join('')}</select></label>
         <label class="f">من صف${gsel('f1', q.gmin)}</label><label class="f">إلى صف${gsel('f2', q.gmax)}</label>
-        <label class="f">المستوى<select id="fl">${[1, 2, 3].map(l => `<option ${l === (q.lvl || 1) ? 'selected' : ''}>${l}</option>`).join('')}</select></label></div>
+        <label class="f">المستوى<select id="fl">${[1, 2, 3, 4, 5].map(l => `<option ${l === (q.lvl || 1) ? 'selected' : ''}>${l}</option>`).join('')}</select></label></div>
       <label class="f">نص للقراءة (اختياري)<textarea id="fp" placeholder="للأسئلة التي تعتمد على قطعة قراءة">${esc(q.passage)}</textarea></label>
       <label class="f">السؤال<input id="fq2" value="${esc(q.q)}" required></label>
       <div class="f"><span>الخيارات (اختر الصحيحة)</span>${q.opts.map((o, i) => `<div class="row"><input type="radio" name="fa" value="${i}" ${i === (q.a || 0) ? 'checked' : ''} style="width:auto" aria-label="الإجابة الصحيحة"><input class="grow" id="fo${i}" value="${esc(o)}" placeholder="الخيار ${i + 1}"></div>`).join('')}</div>

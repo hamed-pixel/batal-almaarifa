@@ -37,16 +37,42 @@ function seal(label, color = 'var(--gold)', cls = 'seal') {
 const badgeColor = id => id.startsWith('rank') ? 'var(--red)' : (CATS.find(c => c.id === id)?.c || 'var(--gold)');
 
 const rankOf = pts => { let r = RANKS[0], next = null; for (const x of RANKS) { if (pts >= x[0]) r = x; else { next = x; break; } } return { name: r[1], from: r[0], next }; };
-const catLevel = pts => pts < 60 ? 1 : pts < 180 ? 2 : 3;
-const LVL_EDGES = [0, 60, 180, 400];
+// 5 مراحل لكل فئة؛ المرحلة = مستوى الأسئلة (1 سهل … 5 الأصعب)
+const LVL_EDGES = [0, 60, 150, 300, 500];
+const MAX_LVL = 5;
+const catLevel = pts => Math.min(MAX_LVL, LVL_EDGES.filter(e => pts >= e).length);
+
+// مؤثرات صوتية مولّدة بالمتصفح (بدون ملفات)، مع زر كتم يُحفظ في الجهاز
+const SFX = (() => {
+  let ctx = null, on = true;
+  try { on = localStorage.getItem('bm_sound') !== 'off'; } catch {}
+  const tone = (f, t0, d, type = 'sine', v = .18) => {
+    const o = ctx.createOscillator(), g = ctx.createGain(), t = ctx.currentTime + t0;
+    o.type = type; o.frequency.setValueAtTime(f, t);
+    g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(v, t + .01); g.gain.exponentialRampToValueAtTime(.001, t + d);
+    o.connect(g).connect(ctx.destination); o.start(t); o.stop(t + d + .02);
+  };
+  const play = notes => { if (!on) return; try { ctx = ctx || new (window.AudioContext || window.webkitAudioContext)(); if (ctx.state === 'suspended') ctx.resume(); notes.forEach(n => tone(...n)); } catch {} };
+  return {
+    get on() { return on; },
+    toggle() { on = !on; try { localStorage.setItem('bm_sound', on ? 'on' : 'off'); } catch {} return on; },
+    ok: () => play([[660, 0, .12], [990, .1, .2]]),
+    bad: () => play([[220, 0, .25, 'triangle'], [165, .15, .3, 'triangle']]),
+    help: () => play([[880, 0, .08, 'triangle', .12]]),
+    tick: () => play([[1200, 0, .05, 'square', .05]]),
+    win: () => play([[523, 0, .15], [659, .12, .15], [784, .24, .15], [1047, .36, .4]])
+  };
+})();
 
 const S = { uid: null, p: null };
 
 function setNav() {
   nav.innerHTML = S.p ? `<button class="ghost" data-go="home">الرئيسية</button><button class="ghost" data-go="profile">ملفي</button><button class="ghost" data-go="logout">خروج</button>` : '';
+  if (S.p) nav.insertAdjacentHTML('afterbegin', `<button class="ghost" data-go="sound" aria-label="الصوت">${SFX.on ? '🔊' : '🔇'}</button>`);
 }
 nav.onclick = async e => {
   const g = e.target.closest('[data-go]')?.dataset.go; if (!g) return;
+  if (g === 'sound') { SFX.toggle(); return setNav(); }
   if (g === 'logout') { await API.logout(); S.uid = S.p = null; return Student.auth(); }
   Student[g]();
 };
@@ -55,6 +81,7 @@ $('.logo').style.cursor = 'pointer';
 
 function showModal(html) {
   return new Promise(res => {
+    SFX.win();
     modalEl.innerHTML = `<div class="modal" role="dialog" aria-modal="true"><div class="card">${html}<button class="btn" id="mclose">رائع!</button></div></div>`;
     const b = $('#mclose'); b.focus();
     b.onclick = () => { modalEl.innerHTML = ''; res(); };
@@ -120,9 +147,9 @@ const Student = {
     app.innerHTML = `${this.heroHTML()}
       <section style="display:grid;gap:12px"><h2 style="font-size:1.25rem">اختر ميدانك</h2>
         <div class="cats">${CATS.map(c => {
-          const pts = p.cats?.[c.id]?.pts || 0, l = catLevel(pts), pct = l === 3 ? 100 : Math.round((pts - LVL_EDGES[l - 1]) / (LVL_EDGES[l] - LVL_EDGES[l - 1]) * 100);
+          const pts = p.cats?.[c.id]?.pts || 0, l = catLevel(pts), pct = l === MAX_LVL ? 100 : Math.round((pts - LVL_EDGES[l - 1]) / (LVL_EDGES[l] - LVL_EDGES[l - 1]) * 100);
           return `<button class="cat" style="--c:${c.c}" data-c="${c.id}">${icon(c.id)}<b>${c.name}</b>
-            <span class="small">المرحلة ${l} · ${pts} نقطة</span><div class="bar"><i style="width:${pct}%"></i></div></button>`;
+            <span class="small">المرحلة ${l} من ${MAX_LVL} · ${pts} نقطة</span><div class="bar"><i style="width:${pct}%"></i></div></button>`;
         }).join('')}</div></section>
       <section class="card lb" id="lb"><h2 style="font-size:1.15rem">لوحة الأبطال</h2><p class="muted small">جارٍ التحميل…</p></section>`;
     app.querySelector('.cats').onclick = e => { const b = e.target.closest('[data-c]'); if (b) Student.play(b.dataset.c); };
@@ -186,12 +213,12 @@ const Student = {
       const bar = $('#tm i'), tm = $('#tm');
       timer = setInterval(() => {
         left -= .25; bar.style.width = (left / T * 100) + '%'; tm.classList.toggle('low', left < T * .25);
-        if (left <= 0) answer(-1);
+        if (left <= 0) answer(-1); else if (left <= 3 && left % 1 === 0) SFX.tick();
       }, 250);
       // مساعدات: كل واحدة مرة في الجولة، بدون خصم نقاط
-      $('#hh').onclick = () => { R.hint = true; $('#hh').disabled = true; const h = $('#ht'); h.textContent = '💡 ' + hintFor(q); h.hidden = false; };
+      $('#hh').onclick = () => { SFX.help(); R.hint = true; $('#hh').disabled = true; const h = $('#ht'); h.textContent = '💡 ' + hintFor(q); h.hidden = false; };
       $('#cut').onclick = () => {
-        R.cut = true; $('#cut').disabled = true;
+        SFX.help(); R.cut = true; $('#cut').disabled = true;
         const btns = [...app.querySelectorAll('.opt')], wrong = shuffle(btns.filter((b, j) => !opts[j].ok && !b.disabled));
         wrong.slice(0, Math.min(2, wrong.length - 1)).forEach(b => { b.disabled = true; b.hidden = true; });
       };
@@ -204,10 +231,10 @@ const Student = {
         if (ok) {
           R.streak++; R.best = Math.max(R.best, R.streak); R.correct++;
           const pts = 10 + Math.ceil(left / T * 5) + (R.streak >= 3 ? 2 : 0);
-          R.score += pts; fb.className = 'feedback ok';
+          R.score += pts; fb.className = 'feedback ok'; SFX.ok();
           fb.textContent = `أحسنت! +${pts}` + (R.streak >= 3 ? ` (سلسلة ${R.streak})` : '');
         } else {
-          R.streak = 0; fb.className = 'feedback bad';
+          R.streak = 0; fb.className = 'feedback bad'; SFX.bad();
           fb.textContent = k < 0 ? 'انتهى الوقت. الإجابة الصحيحة مظلّلة بالأخضر.' : 'ليست هذه. تعلّم الإجابة الصحيحة المظلّلة بالأخضر.';
         }
         if (!q.gen) seen.push(q.id);
@@ -246,6 +273,10 @@ const Student = {
       <div class="row" style="justify-content:center"><button class="btn" id="again">جولة جديدة</button><button class="ghost" onclick="Student.home()">الرئيسية</button></div>
     </section>`;
     $('#again').onclick = () => Student.play(R.cat);
+    const oldL = catLevel(cs.pts), newL = catLevel(cs.pts + R.score);
+    if (newL > oldL) await showModal(`<div class="eyebrow">🎉 مبروك!</div>${seal(String(newL), catOf(R.cat).c)}
+      <h2>انتقلت إلى المرحلة ${newL} في ${catOf(R.cat).name}</h2>
+      <p class="muted" style="margin:0">${newL === MAX_LVL ? 'وصلت لأعلى مرحلة! أنت من أبطال هذا الميدان.' : 'الأسئلة القادمة أصعب قليلًا. أنت قدّها!'}</p>`);
     for (const [id, bn, desc] of fresh) {
       await showModal(`<div class="eyebrow">شارة جديدة</div>${seal(bn[0], badgeColor(id))}
         <h2>${esc(bn)}</h2><p class="muted" style="margin:0">${esc(desc)}</p><p class="quote">${esc(QUOTES[Math.random() * QUOTES.length | 0])}</p>`);

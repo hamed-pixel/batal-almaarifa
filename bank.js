@@ -239,7 +239,7 @@ function mathQ(g, lvl) {
 
 // سلاسل منطقية لتمرين المخ: الصعوبة تزيد مع الصف والمستوى
 function iqQ(g, lvl) {
-  const tier = Math.min(4, Math.floor((g - 1) / 3) + (lvl === 3 ? 1 : 0));
+  const tier = Math.min(4, Math.floor((g - 1) / 3) + Math.max(0, lvl - 2));
   const kinds = ['add', 'add', 'mul', 'alt', 'sq', 'fib', 'tri'].slice(0, 2 + tier * 1.25 | 0);
   const k = pick(kinds); let s;
   if (k === 'add') { const a = R(1, 10), d = R(1, 3 + g); s = [0, 1, 2, 3, 4].map(i => a + i * d); }
