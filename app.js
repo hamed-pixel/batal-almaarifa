@@ -51,8 +51,9 @@ const qid = q => q.gen ? 'g:' + q.q : q.id;
 async function unitsInfo(cat, sem) {
   const g = S.p.grade, done = new Set(S.p.done || []);
   const inSem = (await API.questions()).filter(q => q.cat === cat && q.active !== false && q.gmin <= g && g <= q.gmax && (!q.sem || q.sem === sem) && q.unit);
+  const pre = u => u.split(/الوحد(?:ة|ات|تان) /)[0];
   const num = u => +(u.match(/الوحد(?:ة|ات|تان) (\d+)/) || [])[1] || 0;
-  return [...new Set(inSem.map(q => q.unit))].sort((a, b) => num(a) - num(b) || a.localeCompare(b, 'ar'))
+  return [...new Set(inSem.map(q => q.unit))].sort((a, b) => pre(a).localeCompare(pre(b), 'ar') || num(a) - num(b) || a.localeCompare(b, 'ar'))
     .map(u => { const qs = inSem.filter(q => q.unit === u); return { u, n: num(u), total: qs.length, left: qs.filter(q => !done.has(q.id)).length }; });
 }
 const catOf = id => CATS.find(c => c.id === id) || { name: id, c: '#666' };
@@ -258,7 +259,7 @@ const Student = {
     app.innerHTML = `<section class="card"><p class="muted">جارٍ تجهيز الأسئلة…</p></section>`;
     const { qs, total } = await this.buildRound(cat, sem, unit);
     if (!qs.length && total) {  // انتهت الأسئلة: ننتقل للوحدة التالية
-      const info = c.curr && sem ? await unitsInfo(cat, sem) : [], nextU = unit && unit !== '*' ? info.find(x => x.left && x.n > (info.find(y => y.u === unit)?.n ?? -1)) || info.find(x => x.left) : null;
+      const info = c.curr && sem ? await unitsInfo(cat, sem) : [], nextU = unit && unit !== '*' ? info.slice(info.findIndex(y => y.u === unit) + 1).find(x => x.left) || info.find(x => x.left) : null;
       app.innerHTML = `<section class="card result" style="display:grid;gap:12px;--c:${c.c}">
         <div class="big">🏅</div>
         <h2>${unit && unit !== '*' ? `أكملت «${esc(unit)}»!` : `أنهيت كل أسئلة ${c.name}${sem ? ` للفصل ${sem === 1 ? 'الأول' : 'الثاني'}` : ''} المتاحة لصفّك!`}</h2>
