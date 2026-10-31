@@ -72,6 +72,7 @@ main { max-width: 760px; margin: 0 auto; padding-block: 20px 48px;
 .btn.block { width: 100%; }
 .ghost { background: transparent; border: 1px solid var(--line); border-radius: 10px; padding: 8px 14px; }
 .ghost:hover { border-color: var(--gold); }
+.ghost:disabled { opacity: .5; cursor: default; }
 .link { background: none; border: 0; color: var(--green); text-decoration: underline; padding: 0; }
 
 label.f { display: grid; gap: 6px; font-weight: 600; font-size: .92rem; }

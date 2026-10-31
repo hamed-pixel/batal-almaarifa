@@ -161,7 +161,7 @@ const Student = {
     app.innerHTML = `<section class="card"><p class="muted">جارٍ تجهيز الأسئلة…</p></section>`;
     const { qs, seen } = await this.buildRound(cat);
     if (!qs.length) { app.innerHTML = `<section class="card"><p>لا توجد أسئلة لصفّك في هذه الفئة بعد. سيضيفها المسؤول قريبًا.</p><button class="btn" onclick="Student.home()">رجوع</button></section>`; return; }
-    const R = { cat, i: 0, score: 0, correct: 0, streak: 0, best: 0 };
+    const R = { cat, i: 0, score: 0, correct: 0, streak: 0, best: 0, hint: false, cut: false };
     let timer = null;
     const next = () => {
       clearInterval(timer);
@@ -175,6 +175,11 @@ const Student = {
         ${q.passage ? `<div class="passage">${esc(q.passage)}</div>` : ''}
         <div class="qtext" ${/^[\d\s+\-−×÷=؟.\/()]+$/.test(q.q) ? 'dir="ltr" style="text-align:right"' : ''}>${esc(q.q)}</div>
         <div class="opts">${opts.map((o, k) => `<button class="opt" data-k="${k}">${esc(o.t)}</button>`).join('')}</div>
+        <div class="row" style="gap:8px;flex-wrap:wrap">
+          <button class="ghost" id="hh" ${R.hint ? 'disabled' : ''}>💡 تلميح${R.hint ? ' (استُخدم)' : ''}</button>
+          <button class="ghost" id="cut" ${R.cut ? 'disabled' : ''}>✂️ حذف إجابتين${R.cut ? ' (استُخدم)' : ''}</button>
+        </div>
+        <div class="passage" id="ht" hidden></div>
         <div class="feedback" id="fb"></div>
         <button class="btn green" id="nx" hidden>${R.i + 1 < qs.length ? 'السؤال التالي' : 'النتيجة'}</button>
       </section>`;
@@ -183,8 +188,16 @@ const Student = {
         left -= .25; bar.style.width = (left / T * 100) + '%'; tm.classList.toggle('low', left < T * .25);
         if (left <= 0) answer(-1);
       }, 250);
+      // مساعدات: كل واحدة مرة في الجولة، بدون خصم نقاط
+      $('#hh').onclick = () => { R.hint = true; $('#hh').disabled = true; const h = $('#ht'); h.textContent = '💡 ' + hintFor(q); h.hidden = false; };
+      $('#cut').onclick = () => {
+        R.cut = true; $('#cut').disabled = true;
+        const btns = [...app.querySelectorAll('.opt')], wrong = shuffle(btns.filter((b, j) => !opts[j].ok && !b.disabled));
+        wrong.slice(0, Math.min(2, wrong.length - 1)).forEach(b => { b.disabled = true; b.hidden = true; });
+      };
       const answer = k => {
         clearInterval(timer);
+        $('#hh').disabled = $('#cut').disabled = true;
         const ok = k >= 0 && opts[k].ok;
         app.querySelectorAll('.opt').forEach((b, j) => { b.disabled = true; if (opts[j].ok) b.classList.add('ok'); else if (j === k) b.classList.add('bad'); });
         const fb = $('#fb');
@@ -272,6 +285,22 @@ const Student = {
     $('#hist').innerHTML = games.length ? games.map(a => `<div class="row" style="padding:6px 0;border-bottom:1px solid var(--line)"><span class="grow" style="color:var(--ink)">${catOf(a.cat).name}</span><span>${a.correct}/${a.total}</span><b style="color:var(--gold)">+${a.score}</b><span>${fmtTime(a.at)}</span></div>`).join('') : 'لم تلعب أي جولة بعد.';
   }
 };
+
+// تلميح تلقائي يستبعد خيارًا خاطئًا على الأقل؛ يستخدم q.hint إن كتبه المسؤول
+function hintFor(q) {
+  if (q.hint) return q.hint;
+  const right = String(q.opts[q.a || 0]), wrong = q.opts.filter((_, k) => k !== (q.a || 0)).map(String);
+  const num = t => /^-?\d+(\.\d+)?$/.test(t.trim()) ? +t : NaN;
+  if (!isNaN(num(right)) && wrong.every(w => !isNaN(num(w)))) {
+    const r = num(right), lo = wrong.map(num).filter(w => w < r), hi = wrong.map(num).filter(w => w > r);
+    return lo.length >= hi.length ? `الجواب أكبر من ${Math.max(...lo)}` : `الجواب أصغر من ${Math.min(...hi)}`;
+  }
+  for (let n = 1; n < right.length; n++) {
+    const pre = right.slice(0, n);
+    if (pre.trim() && !wrong.some(w => w.startsWith(pre))) return `الإجابة الصحيحة تبدأ بـ «${pre}…»`;
+  }
+  return `الإجابة الصحيحة ليست «${wrong[0]}»`;
+}
 
 async function route() {
   if (location.hash === '#admin') return Admin.render();
