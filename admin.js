@@ -113,7 +113,11 @@ const Admin = {
     const needSeed = API.live && dbCount === 0;
     API._qcache = null;
     const all = await API.questions();
+    const newOnes = dbCount ? SEED.filter(s => !all.some(q => q.cat === s.cat && q.q === s.q)).length : 0;
     ab.innerHTML = `
+      ${newOnes ? `<section class="card" style="display:grid;gap:10px;border-color:var(--gold)"><b>أسئلة جديدة جاهزة (${newOnes})</b>
+        <p class="small muted" style="margin:0">في البنك المدمج أسئلة غير موجودة في قاعدة البيانات (مثل أسئلة المناهج). أضفها ليلعبها الطلاب.</p>
+        <button class="btn green" id="seed">إضافة الأسئلة الجديدة</button></section>` : ''}
       ${needSeed ? `<section class="card" style="display:grid;gap:10px;border-color:var(--gold)"><b>قاعدة الأسئلة فارغة</b>
         <p class="small muted" style="margin:0">الطلاب يلعبون الآن من البنك المدمج (${SEED.length} سؤالًا). ارفعه إلى قاعدة البيانات لتتمكن من تعديله والإضافة عليه.</p>
         <button class="btn green" id="seed">رفع البنك الأولي</button></section>` : ''}
@@ -127,7 +131,7 @@ const Admin = {
     const draw = () => {
       const L = all.filter(q => (!f.cat || q.cat === f.cat) && (!f.g || (q.gmin <= +f.g && +f.g <= q.gmax)));
       $('#ql').innerHTML = `<p class="small">${L.length} سؤال</p>` + L.map(q => `<div class="qitem" style="${q.active === false ? 'opacity:.5' : ''}">
-        <div class="row small"><span class="chip">${catOf(q.cat).name}</span><span class="chip">ص ${q.gmin}–${q.gmax}</span><span class="chip">مستوى ${q.lvl || 1}</span>${q.active === false ? '<span class="chip">موقوف</span>' : ''}</div>
+        <div class="row small"><span class="chip">${catOf(q.cat).name}</span><span class="chip">ص ${q.gmin}–${q.gmax}</span><span class="chip">مستوى ${q.lvl || 1}</span>${q.sem ? `<span class="chip">الفصل ${q.sem === 1 ? 'الأول' : 'الثاني'}</span>` : ''}${q.active === false ? '<span class="chip">موقوف</span>' : ''}</div>
         ${q.passage ? `<div class="small muted">نص: ${esc(q.passage.slice(0, 70))}…</div>` : ''}
         <b>${esc(q.q)}</b>
         <div class="small">${q.opts.map((o, i) => i === (q.a || 0) ? `<span class="ans">✓ ${esc(o)}</span>` : esc(o)).join(' · ')}</div>
@@ -155,6 +159,7 @@ const Admin = {
     $('#qform').innerHTML = `<h2 style="font-size:1.15rem">${q.id ? 'تعديل سؤال' : 'إضافة سؤال'}</h2>
       <div class="row"><label class="f grow">الفئة<select id="fc">${CATS.map(c => `<option value="${c.id}" ${q.cat === c.id ? 'selected' : ''}>${c.name}</option>`).join('')}</select></label>
         <label class="f">من صف${gsel('f1', q.gmin)}</label><label class="f">إلى صف${gsel('f2', q.gmax)}</label>
+        <label class="f">الفصل<select id="fsem">${[[0, 'الفصلان'], [1, 'الأول'], [2, 'الثاني']].map(([v, n]) => `<option value="${v}" ${v === (q.sem || 0) ? 'selected' : ''}>${n}</option>`).join('')}</select></label>
         <label class="f">المستوى<select id="fl">${[1, 2, 3, 4, 5].map(l => `<option ${l === (q.lvl || 1) ? 'selected' : ''}>${l}</option>`).join('')}</select></label></div>
       <label class="f">نص للقراءة (اختياري)<textarea id="fp" placeholder="للأسئلة التي تعتمد على قطعة قراءة">${esc(q.passage)}</textarea></label>
       <label class="f">السؤال<input id="fq2" value="${esc(q.q)}" required></label>
@@ -166,7 +171,7 @@ const Admin = {
       const opts = [0, 1, 2, 3].map(i => $('#fo' + i).value.trim()), gmin = +$('#f1').value, gmax = +$('#f2').value;
       if (!$('#fq2').value.trim() || opts.some(o => !o)) return $('#fe').textContent = 'اكتب السؤال والخيارات الأربعة.';
       if (gmin > gmax) return $('#fe').textContent = '«من صف» يجب أن يكون أصغر من أو يساوي «إلى صف».';
-      await API.saveQuestion({ id: q.id, cat: $('#fc').value, gmin, gmax, lvl: +$('#fl').value, passage: $('#fp').value.trim(), q: $('#fq2').value.trim(), opts, a: +document.querySelector('[name=fa]:checked').value, active: q.active !== false });
+      await API.saveQuestion({ id: q.id, cat: $('#fc').value, gmin, gmax, lvl: +$('#fl').value, sem: +$('#fsem').value || 0, passage: $('#fp').value.trim(), q: $('#fq2').value.trim(), opts, a: +document.querySelector('[name=fa]:checked').value, active: q.active !== false });
       this.questions();
     };
   },

@@ -9,6 +9,7 @@ const AVATARS = ['🐪', '🦅', '🐢', '🐎', '🐬', '🦌', '🌴', '⛵', 
 const GRADE_NAMES = ['', 'الأول', 'الثاني', 'الثالث', 'الرابع', 'الخامس', 'السادس', 'السابع', 'الثامن', 'التاسع', 'العاشر', 'الحادي عشر', 'الثاني عشر'];
 
 const ICON = {
+  science: '<path d="M12 4h8M13 4v9L6 26a2 2 0 0 0 2 3h16a2 2 0 0 0 2-3l-7-13V4" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linejoin="round"/><path d="M9 21h14" stroke="currentColor" stroke-width="2.4"/>',
   reading: '<path d="M4 7c4-2 8-2 12 1 4-3 8-3 12-1v18c-4-2-8-2-12 1-4-3-8-3-12-1z" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linejoin="round"/><path d="M16 8v18" stroke="currentColor" stroke-width="2.4"/>',
   iq: '<circle cx="16" cy="13" r="8" fill="none" stroke="currentColor" stroke-width="2.4"/><path d="M12 24h8M13 28h6M16 9v4l3 2" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/>',
   math: '<path d="M6 10h8M10 6v8M19 10h8M6 22l7 7M13 22l-7 7M19 23h8M19 28h8" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"/>',
@@ -22,7 +23,8 @@ const CATS = [
   { id: 'math', name: 'الرياضيات', c: '#1F5FA8', t: 45 },
   { id: 'oman', name: 'تاريخ عُمان', c: '#A8161F', t: 30 },
   { id: 'arab', name: 'العرب', c: '#155C3E', t: 30 },
-  { id: 'islam', name: 'ديننا الإسلامي', c: '#0E7C86', t: 30 }
+  { id: 'islam', name: 'ديننا الإسلامي', c: '#0E7C86', t: 30 },
+  { id: 'science', name: 'العلوم', c: '#B4530A', t: 40, curr: true } // من المنهج: الفصل الأول والثاني منفصلان
 ];
 const catOf = id => CATS.find(c => c.id === id) || { name: id, c: '#666' };
 const icon = (id, size = 36) => `<svg viewBox="0 0 32 32" width="${size}" height="${size}" aria-hidden="true">${ICON[id] || ''}</svg>`;
@@ -78,6 +80,16 @@ nav.onclick = async e => {
 };
 $('.logo').onclick = () => { if (location.hash === '#admin') return; S.p ? Student.home() : Student.auth(); };
 $('.logo').style.cursor = 'pointer';
+
+// إعلان في أعلى الصفحة الرئيسية؛ يُخفى عند الإغلاق في هذا الجهاز
+const NEWS_ID = 'curr1';
+function newsHTML() {
+  try { if (localStorage.getItem('bm_news') === NEWS_ID) return ''; } catch {}
+  return `<section class="card news" style="display:grid;gap:8px;border-color:var(--gold);background:color-mix(in srgb, var(--gold) 10%, var(--card))">
+    <div class="row" style="justify-content:space-between"><b>🎉 أخيرًا! صارت المناهج الدراسية في الموقع</b><button class="ghost" onclick="try{localStorage.setItem('bm_news','${NEWS_ID}')}catch{};this.closest('.news').remove()" aria-label="إغلاق">✕</button></div>
+    <p style="margin:0">أضفنا مادة <b>العلوم</b> بأسئلة من دروس كتابك المدرسي لصفّك. و<b>الفصل الأول والفصل الثاني منفصلان</b>: اختر فصلك وابدأ التحدي! وقريبًا مواد أخرى.</p>
+  </section>`;
+}
 
 function showModal(html) {
   return new Promise(res => {
@@ -144,12 +156,12 @@ const Student = {
   async home() {
     setNav(); scrollTo(0, 0);
     const p = S.p;
-    app.innerHTML = `${this.heroHTML()}
+    app.innerHTML = `${newsHTML()}${this.heroHTML()}
       <section style="display:grid;gap:12px"><h2 style="font-size:1.25rem">اختر ميدانك</h2>
         <div class="cats">${CATS.map(c => {
           const pts = p.cats?.[c.id]?.pts || 0, l = catLevel(pts), pct = l === MAX_LVL ? 100 : Math.round((pts - LVL_EDGES[l - 1]) / (LVL_EDGES[l] - LVL_EDGES[l - 1]) * 100);
           return `<button class="cat" style="--c:${c.c}" data-c="${c.id}">${icon(c.id)}<b>${c.name}</b>
-            <span class="small">المرحلة ${l} من ${MAX_LVL} · ${pts} نقطة</span><div class="bar"><i style="width:${pct}%"></i></div></button>`;
+            <span class="small">${c.curr ? '<span class="chip">من منهجك</span> ' : ''}المرحلة ${l} من ${MAX_LVL} · ${pts} نقطة</span><div class="bar"><i style="width:${pct}%"></i></div></button>`;
         }).join('')}</div></section>
       <section class="card lb" id="lb"><h2 style="font-size:1.15rem">لوحة الأبطال</h2><p class="muted small">جارٍ التحميل…</p></section>`;
     app.querySelector('.cats').onclick = e => { const b = e.target.closest('[data-c]'); if (b) Student.play(b.dataset.c); };
@@ -168,10 +180,10 @@ const Student = {
     el.querySelector('.tabs').onclick = e => { const s = e.target.dataset.s; if (s) Student.leaderboard(s); };
   },
 
-  async buildRound(cat) {
+  async buildRound(cat, sem) {
     const g = S.p.grade, lvl = catLevel(S.p.cats?.[cat]?.pts || 0), N = 8;
     let seen = []; try { seen = JSON.parse(localStorage.getItem('bm_seen_' + S.uid)) || []; } catch {}
-    const bank = (await API.questions()).filter(q => q.cat === cat && q.active !== false && q.gmin <= g && g <= q.gmax);
+    const bank = (await API.questions()).filter(q => q.cat === cat && q.active !== false && q.gmin <= g && g <= q.gmax && (!sem || !q.sem || q.sem === sem));
     // المستوى الحالي أولًا، ثم الأسهل، مع تقديم ما لم يُرَ من قبل
     const score = q => (seen.includes(q.id) ? 10 : 0) + ((q.lvl || 1) > lvl ? 20 : 0) + Math.abs(lvl - (q.lvl || 1)) + Math.random();
     let pool = bank.sort((a, b) => score(a) - score(b));
@@ -183,12 +195,21 @@ const Student = {
     return { qs, seen };
   },
 
-  async play(cat) {
+  async play(cat, sem) {
     const c = catOf(cat);
+    if (c.curr && !sem) {  // مواد المنهج: يختار الطالب الفصل الدراسي
+      app.innerHTML = `<section class="card" style="display:grid;gap:14px;--c:${c.c}">
+        <div class="row" style="color:${c.c}">${icon(cat, 28)}<h2 style="font-size:1.25rem">${c.name}</h2></div>
+        <p class="muted" style="margin:0">اختر الفصل الدراسي، والأسئلة تكون من دروس منهجك لصفّك.</p>
+        <div class="row" id="sems" style="gap:10px"><button class="btn" data-s="1" style="flex:1">الفصل الأول</button><button class="btn green" data-s="2" style="flex:1">الفصل الثاني</button></div>
+        <button class="ghost" onclick="Student.home()">رجوع</button></section>`;
+      $('#sems').onclick = e => { const s = e.target.closest('[data-s]'); if (s) Student.play(cat, +s.dataset.s); };
+      return;
+    }
     app.innerHTML = `<section class="card"><p class="muted">جارٍ تجهيز الأسئلة…</p></section>`;
-    const { qs, seen } = await this.buildRound(cat);
-    if (!qs.length) { app.innerHTML = `<section class="card"><p>لا توجد أسئلة لصفّك في هذه الفئة بعد. سيضيفها المسؤول قريبًا.</p><button class="btn" onclick="Student.home()">رجوع</button></section>`; return; }
-    const R = { cat, i: 0, score: 0, correct: 0, streak: 0, best: 0, hint: false, cut: false };
+    const { qs, seen } = await this.buildRound(cat, sem);
+    if (!qs.length) { app.innerHTML = `<section class="card"><p>لا توجد أسئلة لصفّك ${sem ? `في الفصل ${sem === 1 ? 'الأول' : 'الثاني'} ` : ''}في هذه الفئة بعد. سيضيفها المسؤول قريبًا.</p><button class="btn" onclick="Student.home()">رجوع</button></section>`; return; }
+    const R = { cat, sem, i: 0, score: 0, correct: 0, streak: 0, best: 0, hint: false, cut: false };
     let timer = null;
     const next = () => {
       clearInterval(timer);
@@ -272,7 +293,7 @@ const Student = {
       <p class="muted" style="margin:0">${msg}</p>
       <div class="row" style="justify-content:center"><button class="btn" id="again">جولة جديدة</button><button class="ghost" onclick="Student.home()">الرئيسية</button></div>
     </section>`;
-    $('#again').onclick = () => Student.play(R.cat);
+    $('#again').onclick = () => Student.play(R.cat, R.sem);
     const oldL = catLevel(cs.pts), newL = catLevel(cs.pts + R.score);
     if (newL > oldL) await showModal(`<div class="eyebrow">🎉 مبروك!</div>${seal(String(newL), catOf(R.cat).c)}
       <h2>انتقلت إلى المرحلة ${newL} في ${catOf(R.cat).name}</h2>

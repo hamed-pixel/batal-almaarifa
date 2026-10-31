@@ -196,13 +196,16 @@ const API = (() => {
     // رفع البنك الأولي إلى قاعدة البيانات (مرة واحدة)
     async seed() {
       this._qcache = null;
-      if (!live) { mem.questions = structuredClone(SEED); save(); return SEED.length; }
-      for (let i = 0; i < SEED.length; i += 400) {
+      // يرفع فقط أسئلة البنك المدمج غير الموجودة (نفس الفئة ونص السؤال): للرفع الأول ولإضافة الأسئلة الجديدة
+      const have = live ? (await fb.F.getDocs(fb.F.collection(fb.db, 'questions'))).docs.map(x => x.data()) : (mem.questions || []);
+      const missing = SEED.filter(s => !have.some(q => q.cat === s.cat && q.q === s.q));
+      if (!live) { mem.questions = [...(mem.questions || []), ...structuredClone(missing)]; save(); return missing.length; }
+      for (let i = 0; i < missing.length; i += 400) {
         const b = fb.F.writeBatch(fb.db);
-        SEED.slice(i, i + 400).forEach(({ id, ...q }) => b.set(fb.F.doc(fb.F.collection(fb.db, 'questions')), q));
+        missing.slice(i, i + 400).forEach(({ id, ...q }) => b.set(fb.F.doc(fb.F.collection(fb.db, 'questions')), q));
         await b.commit();
       }
-      return SEED.length;
+      return missing.length;
     },
 
     async dbQuestionCount() {
