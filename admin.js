@@ -47,17 +47,17 @@ const Admin = {
       <div class="row">
         <input id="fq" class="grow" placeholder="ابحث بالاسم" value="${esc(f.q)}" style="flex:2 1 160px">
         <select id="fg" style="flex:1 1 110px"><option value="">كل الصفوف</option>${GRADE_NAMES.slice(1).map((n, i) => `<option value="${i + 1}" ${+f.g === i + 1 ? 'selected' : ''}>الصف ${n}</option>`).join('')}</select>
-        <select id="fs" style="flex:1 1 120px"><option value="points">الأعلى نقاطًا</option><option value="lastLogin">آخر دخول</option><option value="name">الاسم</option></select>
+        <select id="fs" style="flex:1 1 120px"><option value="points">الأعلى نقاطًا</option><option value="lastLogin">آخر دخول</option><option value="name">الاسم</option><option value="hints">الأكثر استخدامًا للتلميح</option></select>
         <button class="ghost" id="csv">تصدير CSV</button>
       </div>
-      <div class="tablewrap"><table><thead><tr><th>الطالب</th><th class="num">الصف</th><th class="num">النقاط</th><th class="num">الجولات</th><th class="num">الدقة</th><th>آخر دخول</th><th class="num">مرات الدخول</th></tr></thead><tbody id="tb"></tbody></table></div>
+      <div class="tablewrap"><table><thead><tr><th>الطالب</th><th class="num">الصف</th><th class="num">النقاط</th><th class="num">الجولات</th><th class="num">الدقة</th><th>آخر دخول</th><th class="num">مرات الدخول</th><th class="num">المساعدات</th></tr></thead><tbody id="tb"></tbody></table></div>
       <p class="small muted" style="margin:0" id="cnt"></p></section><div id="det"></div>`;
     $('#fs').value = f.sort;
     const draw = () => {
       let L = this.users.filter(u => (!f.q || u.name.includes(f.q)) && (!f.g || u.grade === +f.g));
       L.sort((a, b) => f.sort === 'name' ? a.name.localeCompare(b.name, 'ar') : (b[f.sort] || 0) - (a[f.sort] || 0));
       $('#tb').innerHTML = L.map(u => `<tr data-u="${u.uid}"><td>${esc(u.avatar)} ${esc(u.name)}</td><td class="num">${u.grade}</td><td class="num">${u.points}</td><td class="num">${u.games}</td>
-        <td class="num">${u.answered ? Math.round(u.correct / u.answered * 100) + '%' : '—'}</td><td>${fmtTime(u.lastLogin)}</td><td class="num">${u.logins || 0}</td></tr>`).join('') || '<tr><td colspan="7" class="muted">لا يوجد طلاب بعد.</td></tr>';
+        <td class="num">${u.answered ? Math.round(u.correct / u.answered * 100) + '%' : '—'}</td><td>${fmtTime(u.lastLogin)}</td><td class="num">${u.logins || 0}</td><td class="num" title="تلميح · حذف إجابتين">💡${u.hints || 0} ✂️${u.cuts || 0}</td></tr>`).join('') || '<tr><td colspan="8" class="muted">لا يوجد طلاب بعد.</td></tr>';
       $('#cnt').textContent = `${L.length} طالب`;
       this.visible = L;
     };
@@ -66,8 +66,8 @@ const Admin = {
     $('#fs').onchange = e => { f.sort = e.target.value; draw(); };
     $('#tb').onclick = e => { const r = e.target.closest('[data-u]'); if (r) this.detail(r.dataset.u); };
     $('#csv').onclick = () => {
-      const rows = [['الاسم', 'الصف', 'النقاط', 'الجولات', 'الإجابات الصحيحة', 'عدد الأسئلة', 'آخر دخول', 'مرات الدخول', 'تاريخ التسجيل'],
-        ...this.visible.map(u => [u.name, u.grade, u.points, u.games, u.correct, u.answered, fmtTime(u.lastLogin), u.logins, fmtTime(u.createdAt)])];
+      const rows = [['الاسم', 'الصف', 'النقاط', 'الجولات', 'الإجابات الصحيحة', 'عدد الأسئلة', 'آخر دخول', 'مرات الدخول', 'تاريخ التسجيل', 'مرات التلميح', 'مرات حذف إجابتين'],
+        ...this.visible.map(u => [u.name, u.grade, u.points, u.games, u.correct, u.answered, fmtTime(u.lastLogin), u.logins, fmtTime(u.createdAt), u.hints || 0, u.cuts || 0])];
       const csv = '﻿' + rows.map(r => r.map(v => `"${String(v ?? '').replace(/"/g, '""')}"`).join(',')).join('\n');
       const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv' })); a.download = 'students.csv'; a.click();
     };
@@ -84,6 +84,8 @@ const Admin = {
         <div class="stat"><span class="small muted">الجولات</span><b>${u.games}</b></div>
         <div class="stat"><span class="small muted">الشارات</span><b>${(u.badges || []).length}</b></div>
         <div class="stat"><span class="small muted">مرات الدخول</span><b>${u.logins || 0}</b></div>
+        <div class="stat"><span class="small muted">💡 التلميح</span><b>${u.hints || 0}</b></div>
+        <div class="stat"><span class="small muted">✂️ حذف إجابتين</span><b>${u.cuts || 0}</b></div>
       </div>
       <div class="small">${CATS.map(c => `${c.name}: <b>${u.cats?.[c.id]?.pts || 0}</b>`).join(' · ')}</div>
       <div class="row"><label class="f grow">تغيير الصف<select id="dg">${GRADE_NAMES.slice(1).map((n, i) => `<option value="${i + 1}" ${i + 1 === u.grade ? 'selected' : ''}>الصف ${n}</option>`).join('')}</select></label>
@@ -101,7 +103,7 @@ const Admin = {
       $('#dyes').onclick = async () => { await API.deleteUser(uid); this.students(); };
     };
     const log = await API.activity(uid, 100);
-    $('#dlog').innerHTML = log.map(a => `<tr><td>${fmtTime(a.at)}</td><td>${a.type === 'login' ? 'دخول' : 'جولة'}</td><td>${a.cat ? catOf(a.cat).name : '—'}</td><td class="num">${a.type === 'game' ? `${a.correct}/${a.total} · +${a.score}` : ''}</td></tr>`).join('') || '<tr><td colspan="4" class="muted">لا يوجد نشاط.</td></tr>';
+    $('#dlog').innerHTML = log.map(a => `<tr><td>${fmtTime(a.at)}</td><td>${a.type === 'login' ? 'دخول' : 'جولة'}</td><td>${a.cat ? catOf(a.cat).name : '—'}</td><td class="num">${a.type === 'game' ? `${a.correct}/${a.total} · +${a.score}${a.hint ? ' · 💡' : ''}${a.cut ? ' · ✂️' : ''}` : ''}</td></tr>`).join('') || '<tr><td colspan="4" class="muted">لا يوجد نشاط.</td></tr>';
   },
 
   async questions() {

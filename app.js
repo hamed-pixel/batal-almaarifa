@@ -253,13 +253,13 @@ const Student = {
     const days = [...new Set([...(p.days || []), today()])].slice(-60);
     const np = {
       ...p, points: p.points + R.score, games: p.games + 1, correct: p.correct + R.correct, answered: p.answered + total,
-      perfects: (p.perfects || 0) + (R.correct === total ? 1 : 0), bestStreak: Math.max(p.bestStreak || 0, R.best), days,
+      perfects: (p.perfects || 0) + (R.correct === total ? 1 : 0), hints: (p.hints || 0) + (R.hint ? 1 : 0), cuts: (p.cuts || 0) + (R.cut ? 1 : 0), bestStreak: Math.max(p.bestStreak || 0, R.best), days,
       cats: { ...p.cats, [R.cat]: { pts: cs.pts + R.score, correct: cs.correct + R.correct, answered: cs.answered + total } }
     };
     const fresh = BADGES.filter(([id, , , ok]) => ok(np) && !(p.badges || []).includes(id));
     np.badges = [...(p.badges || []), ...fresh.map(b => b[0])];
     const { name, grade, avatar, createdAt, lastLogin, logins, ...patch } = np;
-    try { await API.update(S.uid, patch); await API.log(S.uid, { type: 'game', cat: R.cat, score: R.score, correct: R.correct, total }); }
+    try { await API.update(S.uid, patch); await API.log(S.uid, { type: 'game', cat: R.cat, score: R.score, correct: R.correct, total, hint: R.hint, cut: R.cut }); }
     catch { /* يبقى العرض حتى لو فشل الحفظ */ }
     S.p = np;
     const stars = R.correct === total ? 3 : R.correct >= total * .7 ? 2 : R.correct >= total * .4 ? 1 : 0;
