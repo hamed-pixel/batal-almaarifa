@@ -21,9 +21,16 @@ service cloud.firestore {
     }
 
     // لوحة الأبطال: الاسم والصف والنقاط فقط
+    // كل طالب يقرأ أبطال مجموعته فقط
     match /leaderboard/{uid} {
-      allow read: if signedIn();
+      allow read: if isAdmin() || (signedIn() && resource.data.group == get(/databases/$(database)/documents/users/$(request.auth.uid)).data.group);
       allow write: if isMe(uid) || isAdmin();
+    }
+
+    // المجموعات: الاسم والإعلان يُقرآن من رابط التسجيل، ويعدّلها المسؤول فقط
+    match /groups/{id} {
+      allow read: if true;
+      allow write: if isAdmin();
     }
 
     // الأسئلة: يقرؤها كل من سجّل، ويعدّلها المسؤول فقط

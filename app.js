@@ -97,6 +97,9 @@ const SFX = (() => {
 })();
 
 const S = { uid: null, p: null, preview: false };
+// رابط المجموعة: الموقع/?g=المعرّف — يُحفظ حتى يسجّل الطالب حسابه
+try { const jg = new URLSearchParams(location.search).get('g'); if (jg) localStorage.setItem('bm_join', jg); } catch {}
+const joinId = () => { try { return localStorage.getItem('bm_join') || ''; } catch { return ''; } };
 
 function setNav() {
   nav.innerHTML = S.p ? `<button class="ghost" data-go="home">الرئيسية</button><button class="ghost" data-go="profile">ملفي</button>${S.preview ? '<button class="ghost" data-go="exitpv">إنهاء المعاينة</button>' : '<button class="ghost" data-go="logout">خروج</button>'}` : '';
@@ -147,6 +150,7 @@ const Student = {
           <label class="f">الرمز السري<input id="ap" type="password" autocomplete="${mode === 'reg' ? 'new-password' : 'current-password'}" required minlength="6" placeholder="6 خانات على الأقل"></label>
           ${mode === 'reg' ? `
             <div class="f"><span>صفّك الدراسي</span><div class="grades" id="ag">${[...Array(12)].map((_, i) => `<button type="button" data-g="${i + 1}">${i + 1}</button>`).join('')}</div></div>
+            <div id="ajg"></div>
             <div class="f"><span>اختر صورتك</span><div class="avatars" id="aa">${AVATARS.map((a, i) => `<button type="button" class="${i ? '' : 'on'}" data-a="${a}" aria-label="صورة ${i + 1}">${a}</button>`).join('')}</div></div>` : ''}
           <div class="err" id="ae"></div>
           <button class="btn block">${mode === 'reg' ? 'ابدأ الرحلة' : 'دخول'}</button>
@@ -155,7 +159,8 @@ const Student = {
       </section>
       <p class="foot"><button class="link" onclick="location.hash='admin'">دخول المسؤول</button></p>`;
     app.querySelector('.tabs').onclick = e => { const m = e.target.dataset.m; if (m) Student.auth(m); };
-    let grade = 0, avatar = AVATARS[0];
+    let grade = 0, avatar = AVATARS[0], group = 'general';
+    if (mode === 'reg' && joinId()) API.groups().then(G => { const g = G.find(x => x.id === joinId()); if (g && $('#ajg')) { group = g.id; $('#ajg').innerHTML = `<p class="chip" style="margin:0">ستنضم إلى مجموعة: <b>${esc(g.name)}</b></p>`; } });
     $('#ag')?.addEventListener('click', e => { const b = e.target.closest('[data-g]'); if (!b) return; grade = +b.dataset.g; [...$('#ag').children].forEach(x => x.classList.toggle('on', x === b)); });
     $('#aa')?.addEventListener('click', e => { const b = e.target.closest('[data-a]'); if (!b) return; avatar = b.dataset.a; [...$('#aa').children].forEach(x => x.classList.toggle('on', x === b)); });
     $('#af').onsubmit = async e => {
@@ -163,8 +168,9 @@ const Student = {
       const btn = e.submitter; btn.disabled = true;
       try {
         if (mode === 'reg' && !grade) throw new Error('اختر صفّك الدراسي.');
-        S.uid = mode === 'reg' ? await API.register($('#an').value, $('#ap').value, grade, avatar) : await API.login($('#an').value, $('#ap').value);
+        S.uid = mode === 'reg' ? await API.register($('#an').value, $('#ap').value, grade, avatar, group) : await API.login($('#an').value, $('#ap').value);
         S.p = await API.profile(S.uid);
+        if (mode === 'reg') try { localStorage.removeItem('bm_join'); } catch {}
         Student.home();
       } catch (x) { er.textContent = x.message; btn.disabled = false; }
     };
@@ -188,8 +194,10 @@ const Student = {
     setNav(); scrollTo(0, 0);
     const p = S.p;
     let bank = []; try { bank = await API.questions(); } catch {}
+    if (!p.group && !S.preview) { p.group = 'general'; try { await API.update(S.uid, { group: 'general' }); } catch {} }
+    let grp = null; try { grp = (await API.groups()).find(g => g.id === (p.group || 'general')); } catch {}
     const ready = id => id === 'math' || id === 'iq' || bank.some(q => q.cat === id && q.active !== false && q.gmin <= p.grade && p.grade <= q.gmax);
-    app.innerHTML = `${S.preview ? pvBar() : ''}${newsHTML()}${this.heroHTML()}
+    app.innerHTML = `${S.preview ? pvBar() : ''}${grp?.note ? `<section class="card" style="display:grid;gap:6px;border-color:var(--gold)"><b>📢 إعلان لمجموعة «${esc(grp.name)}»</b><p style="margin:0;white-space:pre-line">${esc(grp.note)}</p></section>` : ''}${newsHTML()}${this.heroHTML()}
       <section style="display:grid;gap:12px"><h2 style="font-size:1.25rem">اختر ميدانك</h2>
         <div class="cats">${CATS.filter(c => forGrade(c, p.grade)).map(c => {
           const pts = p.cats?.[c.id]?.pts || 0, l = catLevel(pts), pct = l === MAX_LVL ? 100 : Math.round((pts - LVL_EDGES[l - 1]) / (LVL_EDGES[l] - LVL_EDGES[l - 1]) * 100);
@@ -198,17 +206,20 @@ const Student = {
         }).join('')}</div></section>
       <section class="card lb" id="lb"><h2 style="font-size:1.15rem">لوحة الأبطال</h2><p class="muted small">جارٍ التحميل…</p></section>`;
     app.querySelector('.cats').onclick = e => { const b = e.target.closest('[data-c]'); if (b) Student.play(b.dataset.c); };
-    if (S.preview) $('#pvg').onchange = e => { S.p = pvProfile(+e.target.value); Student.home(); };
+    if (S.preview) {
+      $('#pvg').onchange = e => { S.p = pvProfile(+e.target.value, S.p.group); Student.home(); };
+      API.groups().then(G => { const sel = $('#pvgr'); if (sel) { sel.innerHTML = G.map(g => `<option value="${g.id}" ${g.id === S.p.group ? 'selected' : ''}>${esc(g.name)}</option>`).join(''); sel.onchange = () => { S.p = pvProfile(S.p.grade, sel.value); Student.home(); }; } });
+    }
     this.leaderboard('grade');
   },
 
   async leaderboard(scope) {
     const el = $('#lb'); if (!el) return;
-    let list = []; try { list = await API.leaderboard(); } catch {}
+    let list = []; try { list = await API.leaderboard(S.p.group || 'general'); } catch {}
     if (scope === 'grade') list = list.filter(x => x.grade === S.p.grade);
     const myIdx = list.findIndex(x => x.uid === S.uid);
     el.innerHTML = `<div class="row" style="justify-content:space-between"><h2 style="font-size:1.15rem">لوحة الأبطال</h2>
-      <div class="tabs" style="width:auto"><button data-s="grade" class="${scope === 'grade' ? 'on' : ''}">صفّي</button><button data-s="all" class="${scope === 'all' ? 'on' : ''}">الكل</button></div></div>
+      <div class="tabs" style="width:auto"><button data-s="grade" class="${scope === 'grade' ? 'on' : ''}">صفّي</button><button data-s="all" class="${scope === 'all' ? 'on' : ''}">مجموعتي</button></div></div>
       <ol>${list.slice(0, 10).map((x, i) => `<li class="${x.uid === S.uid ? 'me' : ''}"><span class="num">${i + 1}</span><span>${esc(x.avatar)}</span><span>${esc(x.name)} <span class="small muted">· ص${x.grade}</span></span><span class="num">${x.points}</span></li>`).join('') || '<li class="muted">لا يوجد أبطال بعد. كن الأول!</li>'}</ol>
       ${myIdx >= 10 ? `<p class="small">ترتيبك: <b>${myIdx + 1}</b></p>` : ''}`;
     el.querySelector('.tabs').onclick = e => { const s = e.target.dataset.s; if (s) Student.leaderboard(s); };
@@ -395,7 +406,7 @@ const Student = {
       </section>`;
     let av = p.avatar;
     $('#pa').onclick = e => { const b = e.target.closest('[data-a]'); if (!b) return; av = b.dataset.a; [...$('#pa').children].forEach(x => x.classList.toggle('on', x === b)); };
-    $('#ps').onclick = async () => { if (S.preview) { S.p = pvProfile(+$('#pg').value); S.p.avatar = av; $('#pm').textContent = 'تم (في المعاينة فقط).'; return; } await API.update(S.uid, { avatar: av, grade: +$('#pg').value }); S.p = await API.profile(S.uid); $('#pm').textContent = 'تم الحفظ.'; };
+    $('#ps').onclick = async () => { if (S.preview) { S.p = pvProfile(+$('#pg').value, S.p.group); S.p.avatar = av; $('#pm').textContent = 'تم (في المعاينة فقط).'; return; } await API.update(S.uid, { avatar: av, grade: +$('#pg').value }); S.p = await API.profile(S.uid); $('#pm').textContent = 'تم الحفظ.'; };
     const games = S.preview ? [] : (await API.activity(S.uid, 40)).filter(a => a.type === 'game').slice(0, 10);
     $('#hist').innerHTML = games.length ? games.map(a => `<div class="row" style="padding:6px 0;border-bottom:1px solid var(--line)"><span class="grow" style="color:var(--ink)">${catOf(a.cat).name}</span><span>${a.correct}/${a.total}</span><b style="color:var(--gold)">+${a.score}</b><span>${fmtTime(a.at)}</span></div>`).join('') : 'لم تلعب أي جولة بعد.';
   }
@@ -418,13 +429,14 @@ function hintFor(q) {
 }
 
 // معاينة صفحة الطالب للمسؤول: ملف وهمي لا يُحفظ منه شيء في قاعدة البيانات
-function pvProfile(grade) {
+function pvProfile(grade, group = 'general') {
   try { localStorage.setItem('bm_pvg', grade); } catch {}
-  return { name: 'معاينة المسؤول', grade, avatar: '👀', points: 0, games: 0, correct: 0, answered: 0, perfects: 0, bestStreak: 0, hints: 0, cuts: 0, cats: {}, badges: [], days: [], done: [] };
+  return { name: 'معاينة المسؤول', grade, group, avatar: '👀', points: 0, games: 0, correct: 0, answered: 0, perfects: 0, bestStreak: 0, hints: 0, cuts: 0, cats: {}, badges: [], days: [], done: [] };
 }
 function pvBar() {
   return `<section class="card row" style="justify-content:space-between;border-color:var(--gold);background:color-mix(in srgb, var(--gold) 12%, var(--card))">
     <b>👀 وضع المعاينة: هذا ما يراه الطالب (لا يُحفظ أي شيء)</b>
+    <label class="row small">المجموعة<select id="pvgr"></select></label>
     <label class="row small">الصف<select id="pvg">${GRADE_NAMES.slice(1).map((n, i) => `<option value="${i + 1}" ${i + 1 === S.p.grade ? 'selected' : ''}>${n}</option>`).join('')}</select></label>
   </section>`;
 }

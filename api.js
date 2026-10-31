@@ -12,8 +12,8 @@ const API = (() => {
   // Firebase يحتاج بريدًا؛ نحوّل الاسم العربي إلى بريد ثابت مخفي عن الطالب
   const nameEmail = async n => 's' + (await sha(norm(n))).slice(0, 32) + '@batal-almaarifa.app';
 
-  const newProfile = (name, grade, avatar) => ({
-    name, grade, avatar, points: 0, games: 0, correct: 0, answered: 0, perfects: 0, bestStreak: 0,
+  const newProfile = (name, grade, avatar, group = 'general') => ({
+    name, grade, avatar, group, points: 0, games: 0, correct: 0, answered: 0, perfects: 0, bestStreak: 0,
     cats: {}, badges: [], days: [], createdAt: Date.now(), lastLogin: Date.now(), logins: 1
   });
 
@@ -45,7 +45,7 @@ const API = (() => {
   }
 
   const d = (...p) => fb.F.doc(fb.db, ...p);
-  const lbDoc = p => ({ name: p.name, grade: p.grade, avatar: p.avatar, points: p.points });
+  const lbDoc = p => ({ name: p.name, grade: p.grade, avatar: p.avatar, points: p.points, group: p.group || 'general' });
   const authErr = e => {
     const c = e.code || '';
     if (c.includes('email-already-in-use')) return 'هذا الاسم مستخدم. أضف اسم العائلة أو رقمًا مميزًا.';
@@ -60,10 +60,10 @@ const API = (() => {
 
     me() { return live ? fb.auth.currentUser?.uid || null : (mem.session !== 'admin' ? mem.session : null); },
 
-    async register(name, pass, grade, avatar) {
+    async register(name, pass, grade, avatar, group = 'general') {
       if (name.trim().length < 2) throw new Error('اكتب اسمك الكامل.');
       if (pass.length < 6) throw new Error('الرمز يجب أن يكون 6 خانات على الأقل.');
-      const p = newProfile(name.trim(), grade, avatar);
+      const p = newProfile(name.trim(), grade, avatar, group);
       if (!live) {
         const key = norm(name);
         if (Object.values(mem.users).some(u => norm(u.name) === key)) throw new Error('هذا الاسم مستخدم. أضف اسم العائلة أو رقمًا مميزًا.');
@@ -123,10 +123,31 @@ const API = (() => {
       return (await fb.F.getDocs(q)).docs.map(x => x.data());
     },
 
-    async leaderboard() {
-      if (!live) return Object.entries(mem.users).map(([uid, u]) => ({ uid, ...lbDoc(u) })).sort((a, b) => b.points - a.points).slice(0, 200);
-      const q = fb.F.query(fb.F.collection(fb.db, 'leaderboard'), fb.F.orderBy('points', 'desc'), fb.F.limit(200));
-      return (await fb.F.getDocs(q)).docs.map(x => ({ uid: x.id, ...x.data() }));
+    // لوحة الأبطال لمجموعة واحدة فقط (الترتيب في المتصفح حتى لا نحتاج فهرسًا مركّبًا)
+    async leaderboard(group = 'general') {
+      let L;
+      if (!live) L = Object.entries(mem.users).map(([uid, u]) => ({ uid, ...lbDoc(u) })).filter(x => x.group === group);
+      else L = (await fb.F.getDocs(fb.F.query(fb.F.collection(fb.db, 'leaderboard'), fb.F.where('group', '==', group), fb.F.limit(1000)))).docs.map(x => ({ uid: x.id, ...x.data() }));
+      return L.sort((a, b) => b.points - a.points);
+    },
+
+    // ───── المجموعات ─────  (المجموعة «عامة» موجودة دائمًا ومعرّفها general)
+    async groups() {
+      let L;
+      if (!live) L = Object.entries(mem.groups || {}).map(([id, g]) => ({ id, ...g }));
+      else { try { L = (await fb.F.getDocs(fb.F.collection(fb.db, 'groups'))).docs.map(x => ({ id: x.id, ...x.data() })); } catch { L = []; } }
+      const gen = L.find(g => g.id === 'general');
+      return [{ name: 'عامة', note: '', ...gen, id: 'general' }, ...L.filter(g => g.id !== 'general').sort((a, b) => (a.createdAt || 0) - (b.createdAt || 0))];
+    },
+    async saveGroup(g) {
+      const id = g.id || Math.random().toString(36).slice(2, 8), data = { name: g.name, note: g.note || '', createdAt: g.createdAt || Date.now() };
+      if (!live) { (mem.groups ||= {})[id] = data; save(); return id; }
+      await fb.F.setDoc(d('groups', id), data); return id;
+    },
+    async deleteGroup(id, members) {
+      for (const uid of members) await this.update(uid, { group: 'general' });
+      if (!live) { delete (mem.groups || {})[id]; save(); return; }
+      await fb.F.deleteDoc(d('groups', id));
     },
 
     // الأسئلة: من قاعدة البيانات، وإن كانت فارغة نستخدم البنك الأولي المدمج

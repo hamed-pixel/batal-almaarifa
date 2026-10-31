@@ -1,6 +1,6 @@
 // لوحة المسؤول (تفتح من الرابط: الموقع/#admin)
 const Admin = {
-  tab: 'students', users: [], filter: { q: '', g: '', sort: 'points' }, qf: { cat: '', g: '' },
+  tab: 'students', users: [], filter: { q: '', g: '', grp: '', sort: 'points' }, groups: [], qf: { cat: '', g: '' },
 
   async render() {
     nav.innerHTML = '';
@@ -10,7 +10,7 @@ const Admin = {
     app.innerHTML = `<section class="card" style="display:grid;gap:12px">
         <div class="row" style="justify-content:space-between"><h1 style="font-size:1.4rem">لوحة المسؤول</h1>
           <span class="row"><button class="btn" onclick="location.hash='preview'">👀 معاينة صفحة الطالب</button><span class="chip">${API.live ? 'متصل بقاعدة البيانات' : 'وضع تجريبي'}</span></span></div>
-        <div class="tabs"><button data-t="students">الطلاب</button><button data-t="questions">الأسئلة</button><button data-t="summary">ملخص</button></div>
+        <div class="tabs"><button data-t="students">الطلاب</button><button data-t="groups">المجموعات</button><button data-t="questions">الأسئلة</button><button data-t="summary">ملخص</button></div>
       </section><div id="ab"></div>`;
     app.querySelector('.tabs').onclick = e => { const t = e.target.dataset.t; if (t) { this.tab = t; this.show(); } };
     this.show();
@@ -34,10 +34,45 @@ const Admin = {
 
   show() {
     app.querySelectorAll('.tabs button').forEach(b => b.classList.toggle('on', b.dataset.t === this.tab));
-    ({ students: () => this.students(), questions: () => this.questions(), summary: () => this.summary() })[this.tab]();
+    $('#ab').onclick = null;
+    ({ students: () => this.students(), groups: () => this.groupsTab(), questions: () => this.questions(), summary: () => this.summary() })[this.tab]();
   },
 
-  async loadUsers() { this.users = await API.users(); return this.users; },
+  async loadUsers() {
+    [this.users, this.groups] = await Promise.all([API.users(), API.groups()]);
+    // الطلاب المسجّلون قبل المجموعات يدخلون «عامة»
+    for (const u of this.users.filter(u => !u.group)) { u.group = 'general'; try { await API.adminUpdate(u.uid, { group: 'general' }); } catch {} }
+    return this.users;
+  },
+  gname(id) { return this.groups.find(g => g.id === (id || 'general'))?.name || 'عامة'; },
+  glink(id) { return location.origin + location.pathname + '?g=' + id; },
+
+  async groupsTab() {
+    const ab = $('#ab'); ab.innerHTML = '<p class="muted">جارٍ التحميل…</p>';
+    await this.loadUsers();
+    const n = id => this.users.filter(u => (u.group || 'general') === id).length;
+    ab.innerHTML = `<section class="card form"><h2 style="font-size:1.15rem">مجموعة جديدة</h2>
+        <div class="row"><input id="gnew" class="grow" placeholder="اسم المجموعة، مثال: الصف السابع – مدرسة النور"><button class="btn green" id="gadd">إنشاء</button></div>
+        <p class="small muted" style="margin:0">كل مجموعة لها رابط تسجيل خاص. الطالب اللي يسجّل من الرابط يدخل المجموعة تلقائيًا، ولوحة الأبطال عنده تعرض مجموعته فقط.</p></section>
+      ${this.groups.map(g => `<section class="card form" data-g="${g.id}">
+        <div class="row" style="justify-content:space-between"><input class="gname grow" value="${esc(g.name)}" ${g.id === 'general' ? 'disabled' : ''} style="font-weight:700"><span class="chip">${n(g.id)} طالب</span></div>
+        <div class="row"><input class="grow small" readonly value="${this.glink(g.id)}" dir="ltr"><button class="ghost gcopy">نسخ الرابط</button></div>
+        <label class="f">إعلان لطلاب هذه المجموعة (يظهر في صفحتهم الرئيسية، اتركه فارغًا لإخفائه)<textarea class="gnote" rows="2">${esc(g.note || '')}</textarea></label>
+        <div class="row"><button class="btn gsave">حفظ</button><button class="ghost gview">عرض طلابها</button>${g.id === 'general' ? '' : '<button class="ghost gdel" style="color:var(--bad)">حذف المجموعة</button>'}<span class="small gmsg"></span></div>
+      </section>`).join('')}`;
+    $('#gadd').onclick = async () => { const name = $('#gnew').value.trim(); if (!name) return; await API.saveGroup({ name }); this.groupsTab(); };
+    ab.onclick = async e => {
+      const card = e.target.closest('[data-g]'); if (!card) return;
+      const id = card.dataset.g, g = this.groups.find(x => x.id === id), msg = card.querySelector('.gmsg');
+      if (e.target.matches('.gcopy')) { try { await navigator.clipboard.writeText(this.glink(id)); msg.textContent = 'تم النسخ.'; } catch { card.querySelector('[readonly]').select(); } }
+      if (e.target.matches('.gsave')) { await API.saveGroup({ ...g, id, name: id === 'general' ? 'عامة' : card.querySelector('.gname').value.trim() || g.name, note: card.querySelector('.gnote').value.trim() }); msg.textContent = 'تم الحفظ.'; this.groups = await API.groups(); }
+      if (e.target.matches('.gview')) { this.filter.grp = id; this.tab = 'students'; this.show(); }
+      if (e.target.matches('.gdel')) {
+        if (!e.target.dataset.sure) { e.target.dataset.sure = 1; e.target.textContent = `تأكيد الحذف؟ (${n(id)} طالب ينتقلون إلى «عامة»)`; return; }
+        e.target.disabled = true; await API.deleteGroup(id, this.users.filter(u => u.group === id).map(u => u.uid)); this.groupsTab();
+      }
+    };
+  },
 
   async students() {
     const ab = $('#ab'); ab.innerHTML = '<p class="muted">جارٍ التحميل…</p>';
@@ -47,27 +82,29 @@ const Admin = {
       <div class="row">
         <input id="fq" class="grow" placeholder="ابحث بالاسم" value="${esc(f.q)}" style="flex:2 1 160px">
         <select id="fg" style="flex:1 1 110px"><option value="">كل الصفوف</option>${GRADE_NAMES.slice(1).map((n, i) => `<option value="${i + 1}" ${+f.g === i + 1 ? 'selected' : ''}>الصف ${n}</option>`).join('')}</select>
+        <select id="fgr" style="flex:1 1 120px"><option value="">كل المجموعات</option>${this.groups.map(g => `<option value="${g.id}" ${f.grp === g.id ? 'selected' : ''}>${esc(g.name)}</option>`).join('')}</select>
         <select id="fs" style="flex:1 1 120px"><option value="points">الأعلى نقاطًا</option><option value="lastLogin">آخر دخول</option><option value="name">الاسم</option><option value="hints">الأكثر استخدامًا للتلميح</option></select>
         <button class="ghost" id="csv">تصدير CSV</button>
       </div>
-      <div class="tablewrap"><table><thead><tr><th>الطالب</th><th class="num">الصف</th><th class="num">النقاط</th><th class="num">الجولات</th><th class="num">الدقة</th><th>آخر دخول</th><th class="num">مرات الدخول</th><th class="num">المساعدات</th></tr></thead><tbody id="tb"></tbody></table></div>
+      <div class="tablewrap"><table><thead><tr><th>الطالب</th><th>المجموعة</th><th class="num">الصف</th><th class="num">النقاط</th><th class="num">الجولات</th><th class="num">الدقة</th><th>آخر دخول</th><th class="num">مرات الدخول</th><th class="num">المساعدات</th></tr></thead><tbody id="tb"></tbody></table></div>
       <p class="small muted" style="margin:0" id="cnt"></p></section><div id="det"></div>`;
     $('#fs').value = f.sort;
     const draw = () => {
-      let L = this.users.filter(u => (!f.q || u.name.includes(f.q)) && (!f.g || u.grade === +f.g));
+      let L = this.users.filter(u => (!f.q || u.name.includes(f.q)) && (!f.g || u.grade === +f.g) && (!f.grp || (u.group || 'general') === f.grp));
       L.sort((a, b) => f.sort === 'name' ? a.name.localeCompare(b.name, 'ar') : (b[f.sort] || 0) - (a[f.sort] || 0));
-      $('#tb').innerHTML = L.map(u => `<tr data-u="${u.uid}"><td>${esc(u.avatar)} ${esc(u.name)}</td><td class="num">${u.grade}</td><td class="num">${u.points}</td><td class="num">${u.games}</td>
-        <td class="num">${u.answered ? Math.round(u.correct / u.answered * 100) + '%' : '—'}</td><td>${fmtTime(u.lastLogin)}</td><td class="num">${u.logins || 0}</td><td class="num" title="تلميح · حذف إجابتين">💡${u.hints || 0} ✂️${u.cuts || 0}</td></tr>`).join('') || '<tr><td colspan="8" class="muted">لا يوجد طلاب بعد.</td></tr>';
+      $('#tb').innerHTML = L.map(u => `<tr data-u="${u.uid}"><td>${esc(u.avatar)} ${esc(u.name)}</td><td class="small">${esc(this.gname(u.group))}</td><td class="num">${u.grade}</td><td class="num">${u.points}</td><td class="num">${u.games}</td>
+        <td class="num">${u.answered ? Math.round(u.correct / u.answered * 100) + '%' : '—'}</td><td>${fmtTime(u.lastLogin)}</td><td class="num">${u.logins || 0}</td><td class="num" title="تلميح · حذف إجابتين">💡${u.hints || 0} ✂️${u.cuts || 0}</td></tr>`).join('') || '<tr><td colspan="9" class="muted">لا يوجد طلاب.</td></tr>';
       $('#cnt').textContent = `${L.length} طالب`;
       this.visible = L;
     };
     $('#fq').oninput = e => { f.q = e.target.value.trim(); draw(); };
     $('#fg').onchange = e => { f.g = e.target.value; draw(); };
+    $('#fgr').onchange = e => { f.grp = e.target.value; draw(); };
     $('#fs').onchange = e => { f.sort = e.target.value; draw(); };
     $('#tb').onclick = e => { const r = e.target.closest('[data-u]'); if (r) this.detail(r.dataset.u); };
     $('#csv').onclick = () => {
-      const rows = [['الاسم', 'الصف', 'النقاط', 'الجولات', 'الإجابات الصحيحة', 'عدد الأسئلة', 'آخر دخول', 'مرات الدخول', 'تاريخ التسجيل', 'مرات التلميح', 'مرات حذف إجابتين'],
-        ...this.visible.map(u => [u.name, u.grade, u.points, u.games, u.correct, u.answered, fmtTime(u.lastLogin), u.logins, fmtTime(u.createdAt), u.hints || 0, u.cuts || 0])];
+      const rows = [['الاسم', 'المجموعة', 'الصف', 'النقاط', 'الجولات', 'الإجابات الصحيحة', 'عدد الأسئلة', 'آخر دخول', 'مرات الدخول', 'تاريخ التسجيل', 'مرات التلميح', 'مرات حذف إجابتين'],
+        ...this.visible.map(u => [u.name, this.gname(u.group), u.grade, u.points, u.games, u.correct, u.answered, fmtTime(u.lastLogin), u.logins, fmtTime(u.createdAt), u.hints || 0, u.cuts || 0])];
       const csv = '﻿' + rows.map(r => r.map(v => `"${String(v ?? '').replace(/"/g, '""')}"`).join(',')).join('\n');
       const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv' })); a.download = 'students.csv'; a.click();
     };
@@ -89,6 +126,7 @@ const Admin = {
       </div>
       <div class="small">${CATS.map(c => `${c.name}: <b>${u.cats?.[c.id]?.pts || 0}</b>`).join(' · ')}</div>
       <div class="row"><label class="f grow">تغيير الصف<select id="dg">${GRADE_NAMES.slice(1).map((n, i) => `<option value="${i + 1}" ${i + 1 === u.grade ? 'selected' : ''}>الصف ${n}</option>`).join('')}</select></label>
+        <label class="f grow">المجموعة<select id="dgr">${this.groups.map(g => `<option value="${g.id}" ${g.id === (u.group || 'general') ? 'selected' : ''}>${esc(g.name)}</option>`).join('')}</select></label>
         <button class="btn green" id="dgs" style="align-self:end">حفظ</button>
         <button class="ghost" id="ddel" style="align-self:end;color:var(--bad)">حذف الطالب</button></div>
       <div id="dconf"></div>
@@ -96,7 +134,7 @@ const Admin = {
     </section>`;
     det.scrollIntoView({ behavior: 'smooth' });
     $('#dx').onclick = () => det.innerHTML = '';
-    $('#dgs').onclick = async () => { await API.adminUpdate(uid, { grade: +$('#dg').value }); this.students(); };
+    $('#dgs').onclick = async () => { await API.adminUpdate(uid, { grade: +$('#dg').value, group: $('#dgr').value }); this.students(); };
     $('#ddel').onclick = () => {
       $('#dconf').innerHTML = `<div class="row" style="background:var(--plaster);padding:10px;border-radius:10px"><span class="grow">حذف «${esc(u.name)}» وكل نقاطه؟ لا يمكن التراجع.</span><button class="btn" id="dyes">نعم، احذف</button><button class="ghost" id="dno">إلغاء</button></div>`;
       $('#dno').onclick = () => $('#dconf').innerHTML = '';
